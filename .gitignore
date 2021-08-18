@@ -7,6 +7,8 @@ tests/
 SavedModels/
 plotting/
 ignore/
+performance_profiles/
+logs/
 
 # Files
 *.pdf
@@ -22,4 +24,5 @@ ignore/
 *.dat
 
 load_profile.py
+test.py
 test?.py
