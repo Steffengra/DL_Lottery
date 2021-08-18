@@ -23,33 +23,38 @@ class Config:
             self
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
+        self.toggle_profiling: bool = False  # compute performance profiling
+
         # Simulation Environment Parameters-----------------------------------------
-        simulation_title: str = 'anchoring_random_training'
+        simulation_title: str = 'test'
+
         simulation_length_seconds: int = 1
         self.num_episodes: int = 10
+        self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
 
+        # load related
         self.available_rb_ofdm: int = 10
-        self.bandwidth_per_rb_khz: int = 12 * 15  # 5g num0 = 12 subcarriers * 15 khz
+        self.bandwidth_per_rb_khz: int = 12 * 15  # 5g num0 = 12 subcarriers * 15 khz. Converts rb to bw for capacity
 
         self.num_users: int = 5
-        self.ue_snr_db: float = 10
-        self.ue_position_range: dict = {'low': -100, 'high': 100}
-        self.ue_rayleigh_fading_scale: float = .1
-        # self.path_loss_exponent: float = 2
         self.job_creation_probability: float = 0.4
         self.max_job_size_rb: int = 6
+
+        # reward related
+        self.ue_snr_db: float = 10  # for capacity
+        self.ue_rayleigh_fading_scale: float = .1  # for capacity
+        self.ue_position_range: dict = {'low': -100, 'high': 100}  # for capacity
+        # self.ue_path_loss_exponent: float = 2  # for capacity
         self.timeout_step: dict = {  # after how many time delays is a job timed out?
             'normal': 5,
             'priority': 1,
         }
-        self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0
         self.reward_sum_weightings: dict = {
             'sum_capacity_kbit_per_second': + 1.0,
             'sum_normal_timeouts': - 1.0,  # not including priority jobs
             'sum_priority_timeouts': - 1.0,
         }
 
-        self.toggle_profiling: bool = False
         # self.toggle_reward_component_logging: bool = False  # fine grain logging  # TODO
         # self.toggle_position_logging: bool = False  # high computation cost
         # self.toggle_resource_grid_logging: bool = False  # high computation cost
@@ -57,19 +62,14 @@ class Config:
 
         # Neural Network Parameters-------------------------------------------------
         # Architecture-------
-        self.hidden_layers_value_net: list = [512, 512, 512, 512, 512]
-        self.hidden_layers_policy_net: list = [512, 512, 512, 512, 512]
-        # self.hidden_layers_value_net: list = [2, 3]
-        # self.hidden_layers_policy_net: list = [2, 3]
+        self.hidden_layers_value_net: list = [512, 512, 512, 512, 512]  # + output layer width 1
+        self.hidden_layers_policy_net: list = [512, 512, 512, 512, 512]  # + output layer width num_actions
         self.hidden_layer_args: dict = {
             'activation_hidden': 'penalized_tanh',  # [>'relu', 'elu', 'penalized_tanh']
             'kernel_initializer': 'glorot_uniform'  # options: tf.keras.initializers, default: >'glorot_uniform'
         }
         self.num_actions_policy: int = self.num_users
-        # Training-----------
-        self.future_reward_discount_gamma_allocation: float = 0.00
-        self.train_policy_every_k: int = 1  # td3 waits a number of value net updates before updating policy net
-        train_policy_after_j: float = 0.0  # start training policy after j% of simulation steps
+
         self.optimizer_critic = optimizer_adam  # 'adam', 'nadam', 'amsgrad'
         self.optimizer_critic_args: dict = {
             'learning_rate': 1e-4,
@@ -82,6 +82,12 @@ class Config:
             'epsilon': 1e-8,
             'amsgrad': True
         }
+
+        # Training-----------
+        self.future_reward_discount_gamma_allocation: float = 0.00
+        self.train_policy_every_k: int = 1  # td3 waits a number of value net updates before updating policy net
+        train_policy_after_j: float = 0.0  # start training policy after j% of simulation steps
+
         self.training_noise_std: float = 1e-2  # introduce a small amount of noise onto the policy in value training..
         self.training_noise_clip: float = 0.05  # ..to avoid narrow peaks in value function
         # soft update theta_target_new = tau * theta_primary + (1 - tau) * theta_target_old
@@ -108,40 +114,43 @@ class Config:
         # Pruning------------
         self.prune_network: bool = False
         self.pruning_args: dict = {
-            'magnitude_percentile': 10,  # prune parameters |w_final|
-            'magnitude_increase_percentile': 0,  # prune parameters |w_final| - |w_init|
+            'magnitude_percentile': 10,  # prune parameters |w_final|, remove below percentile
+            'magnitude_increase_percentile': 0,  # prune parameters |w_final| - |w_init|, remove below percentile
         }
 
         # Definitions---------------------------------------------------------------------------------------------------
         # Simulation Environment Parameters-----------------------------------------
-        # self.mobility_types: dict = {'High': {'range_initial': [-25, 25], 'step_size_max': .8},
-        #                              'Low': {'range_initial': [-3, 3], 'step_size_max': .001},
-        #                              'Static': {'range_initial': [-3, 3], 'step_size_max': 0}}
+        # self.mobility_types: dict = {
+        #     'High': {'range_initial': [-25, 25], 'step_size_max': .8},
+        #     'Low': {'range_initial': [-3, 3], 'step_size_max': .001},
+        #     'Static': {'range_initial': [-3, 3], 'step_size_max': 0}
+        # }
 
         self.duration_frame_s: float = 0.01
         self.duration_subframe_s: float = self.duration_frame_s / 10
 
-        self.five_g_numerologies: dict = {0: {'delta_f_khz': 15,  # fr1
-                                              'slots_per_subframe': 1,
-                                              'max_carrier_bandwidth_mhz': 50,
-                                              'max_amount_resource_blocks': 270,
-                                              'symbol_duration_ms': 1 / 14},
-                                          1: {'delta_f_khz': 30,  # fr1
-                                              'slots_per_subframe': 2,
-                                              'max_carrier_bandwidth_mhz': 100,
-                                              'max_amount_resource_blocks': 273,
-                                              'symbol_duration_ms': 1 / 28},
-                                          2: {'delta_f_khz': 60,  # fr1 + fr2
-                                              'slots_per_subframe': 4,
-                                              'max_carrier_bandwidth_mhz': 200,
-                                              'max_amount_resource_blocks': 264,
-                                              'symbol_duration_ms': 1 / 56},
-                                          3: {'delta_f_khz': 120,  # fr2
-                                              'slots_per_subframe': 8,
-                                              'max_carrier_bandwidth_mhz': 400,
-                                              'max_amount_resource_blocks': 264,
-                                              'symbol_duration_ms': 1 / 112}}
-
+        self.five_g_numerologies: dict = {
+            0: {'delta_f_khz': 15,  # fr1
+                'slots_per_subframe': 1,
+                'max_carrier_bandwidth_mhz': 50,
+                'max_amount_resource_blocks': 270,
+                'symbol_duration_ms': 1 / 14},
+            1: {'delta_f_khz': 30,  # fr1
+                'slots_per_subframe': 2,
+                'max_carrier_bandwidth_mhz': 100,
+                'max_amount_resource_blocks': 273,
+                'symbol_duration_ms': 1 / 28},
+            2: {'delta_f_khz': 60,  # fr1 + fr2
+                'slots_per_subframe': 4,
+                'max_carrier_bandwidth_mhz': 200,
+                'max_amount_resource_blocks': 264,
+                'symbol_duration_ms': 1 / 56},
+            3: {'delta_f_khz': 120,  # fr2
+                'slots_per_subframe': 8,
+                'max_carrier_bandwidth_mhz': 400,
+                'max_amount_resource_blocks': 264,
+                'symbol_duration_ms': 1 / 112}
+        }
         self.five_g_mcs_table: dict = {
             2: {0: {'spectral_efficiency': 0.2344, 'mod_order': 2, 'coding_rate': 120 / 1024},
                 1: {'spectral_efficiency': 0.3770, 'mod_order': 2, 'coding_rate': 193 / 1024},
@@ -203,34 +212,39 @@ class Config:
 
         # Simulation Parameters-----------------------------------------------------
         self.model_path: str = join(dirname(__file__), 'SavedModels', simulation_title)
-        self.log_path: str = join(dirname(__file__), 'logs')
+        self.log_path: str = join(dirname(__file__), 'logs', simulation_title)
         self.performance_profile_path: str = join(dirname(__file__), 'performance_profiles')
 
         # Internal------------------------------------------------------------------
         self.num_steps_per_episode: int = int(
-            simulation_length_seconds / self.duration_subframe_s * self.symbols_per_subframe)
+            simulation_length_seconds / self.duration_subframe_s * self.symbols_per_subframe
+        )
         self.steps_total: int = self.num_episodes * self.num_steps_per_episode
+
         self.pos_base_station: ndarray = array([0, 0])
         self.ue_snr_linear = 10 ** (self.ue_snr_db / 10)
 
         # Exploration--------------
         self.exploration_noise_step_start_decay: int = ceil(
-            exploration_noise_decay_start * self.num_episodes * self.num_steps_per_episode)
+            exploration_noise_decay_start * self.num_episodes * self.num_steps_per_episode
+        )
 
         self.exploration_noise_linear_decay_per_step: float = (
-                self.exploration_noise_momentum_initial / (
-                    exploration_noise_decay_threshold * (
-                        self.num_episodes * self.num_steps_per_episode - (
-                            self.exploration_noise_step_start_decay))))
+            self.exploration_noise_momentum_initial / (
+                exploration_noise_decay_threshold * (
+                    self.num_episodes * self.num_steps_per_episode - self.exploration_noise_step_start_decay
+                )
+            )
+        )
 
         # self.value_based_exploration_step_start: int = ceil(
         #     value_based_exploration_interval['start'] * self.steps_total)
         # self.value_based_exploration_step_end: int = ceil(
         #     value_based_exploration_interval['end'] * self.steps_total)
-        # -------------------------
 
-        self.train_policy_after_j: int = floor(
-            train_policy_after_j * self.num_episodes * self.num_steps_per_episode)
+        self.train_policy_after_j_steps: int = floor(
+            train_policy_after_j * self.num_episodes * self.num_steps_per_episode
+        )
 
         self.td3_args = {
             'batch_size': self.batch_size,
@@ -246,6 +260,12 @@ class Config:
             'optimizer_actor_args': self.optimizer_actor_args,
             'hidden_layer_args': self.hidden_layer_args,
             'batch_normalize': self.batch_normalize
+        }
+        self.training_args = {
+            'training_noise_std': self.training_noise_std,
+            'training_noise_clip': self.training_noise_clip,
+            'tau_target_update': self.tau_target_update,
+            'weight_anchoring_lambda': self.anchoring_weight_lambda,
         }
 
         # Plotting------------------------------------------------------------------

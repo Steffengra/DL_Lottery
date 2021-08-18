@@ -153,7 +153,7 @@ class TD3ActorCritic:
             value_path: str,
             policy_path: str
     ):
-        # TODO: This loads networks with newly initialized optimizers technically
+        # TODO: This loads networks with newly initialized optimizers
         for network in ['value1', 'value2']:
             for network_type in ['primary', 'target']:
                 if network_type == 'primary':
@@ -194,7 +194,8 @@ class TD3ActorCritic:
                 or
                 num_layers_policy > len(layers_policy[0])
         ):
-            print('Cannot freeze more layers than present: {} value, {} policy'.format(len(layers_value[0]), len(layers_policy[0])))
+            print('Cannot freeze more layers than present: {} value, {} policy'.format(
+                len(layers_value[0]), len(layers_policy[0])))
             exit()
 
         for network_layers in layers_policy:
@@ -210,7 +211,9 @@ class TD3ActorCritic:
             state: ndarray,
             action: ndarray
     ) -> tuple[tf.Tensor, tf.Tensor]:
-        """Wrapper to call value networks"""
+        """
+        Wrapper to call value networks
+        """
 
         if ndim(state) == 1:
             state = array(state)[newaxis]
@@ -227,7 +230,9 @@ class TD3ActorCritic:
             state: ndarray,
             action: ndarray
     ) -> tf.Tensor:
-        """Wrapper to call main value network"""
+        """
+        Wrapper to call main value network
+        """
         if ndim(state) == 1:
             state = array(state)[newaxis]
         if ndim(action) == 1:
@@ -241,7 +246,9 @@ class TD3ActorCritic:
             self,
             state: ndarray
     ) -> tf.Tensor:
-        """Wrapper to call policy network"""
+        """
+        Wrapper to call policy network
+        """
         network_input = array(state, dtype='float32')
         if len(network_input.shape) == 1:
             network_input = expand_dims(network_input, axis=0)
@@ -258,7 +265,9 @@ class TD3ActorCritic:
             self,
             network: str  # target or primary
     ) -> list:
-        """Some optimizers such as adam calculate a fisher diagonal estimate part of the optimization"""
+        """
+        Some optimizers such as adam calculate a fisher diagonal estimate part of the optimization
+        """
         fisher_diagonal_estimates = [
             self.networks['policy'][network].optimizer.get_slot(var, 'vhat').numpy()
             for var in self.networks['policy'][network].trainable_variables
@@ -273,7 +282,9 @@ class TD3ActorCritic:
             reward,
             next_state
     ) -> None:
-        """Wrapper to add experience to buffer"""
+        """
+        Wrapper to add experience to buffer
+        """
         self.experience_buffer.add_experience(state, action, reward, next_state)
 
     @tf.function
@@ -281,7 +292,9 @@ class TD3ActorCritic:
             self,
             tau_target_update
     ) -> None:
-        """Performs a soft update theta_target_new = tau * theta_primary + (1 - tau) * theta_target_old"""
+        """
+        Performs a soft update theta_target_new = tau * theta_primary + (1 - tau) * theta_target_old
+        """
         for network_pair in self.networks.values():
             # trainable variables are a list of tf variables
             variables_primary = network_pair['primary'].trainable_variables
@@ -316,7 +329,9 @@ class TD3ActorCritic:
                 return network.call_and_normalize_on_batch(inputs)
             else:
                 return network.call(inputs)
-        """Wraps as much as possible of the training process into a graph for performance"""
+        """
+        Wraps as much as possible of the training process into a graph for performance
+        """
 
         # Value Networks------------------------------------------------------------------------------------------------
         q1_loss = -10.0
@@ -461,8 +476,6 @@ class TD3ActorCritic:
 
         if policy_parameters_anchor:
             weight_anchoring_lambda = tf.constant(weight_anchoring_lambda, dtype=tf.float32)
-            # policy_parameters_anchor = tf.constant(policy_parameters_anchor, dtype=tf.float32)
-            # policy_parameters_fisher = tf.constant(policy_parameters_fisher, dtype=tf.float32)
 
         (
             q1_loss,

@@ -3,9 +3,7 @@ from numpy import (
     ndarray,
     log2,
     zeros,
-    ones,
     concatenate,
-    infty
 )
 
 from DL_Lottery_imports.basic_resource_grid import ResourceGrid
@@ -21,20 +19,12 @@ class Simulation:
             config,
             rng,
     ) -> None:
-        self.config = config
-        self.rng = rng
-
-        self.res_grid = ResourceGrid(total_resource_blocks=config.available_rb_ofdm)
-
-        self.users = {}
-        self.initialize_users()
-        self.generate_new_jobs()
-
-    def initialize_users(
-            self,
-    ) -> None:
-        for user_id in range(self.config.num_users):
-            self.users[user_id] = UserEquipment(
+        def initialize_users() -> None:
+            """
+            Initialize users according to config
+            """
+            for user_id in range(self.config.num_users):
+                self.users[user_id] = UserEquipment(
                     user_id=user_id,
                     pos_initial={'x': self.rng.integers(low=self.config.ue_position_range['low'],
                                                         high=self.config.ue_position_range['high']),
@@ -42,7 +32,16 @@ class Simulation:
                                                         high=self.config.ue_position_range['high'])},
                     max_job_size_rb=self.config.max_job_size_rb,
                     rayleigh_fading_scale=self.config.ue_rayleigh_fading_scale,
-            )
+                )
+
+        self.config = config
+        self.rng = rng
+
+        self.res_grid = ResourceGrid(total_resource_blocks=config.available_rb_ofdm)
+
+        self.users = {}
+        initialize_users()
+        self.generate_new_jobs()
 
     def generate_new_jobs(
             self,
@@ -57,9 +56,26 @@ class Simulation:
         for ue in self.users.values():
             ue.update_channel_fading()
 
+    def get_expected_load(
+            self,
+    ) -> float:
+        """
+        Calculate expected load according to config
+        """
+        expected_rb = 0
+        for ue in self.users.values():
+            mean_job_size = (1 + ue.max_job_size_rb) / 2
+            expected_rb += self.config.job_creation_probability * mean_job_size
+        expected_load = expected_rb / self.res_grid.total_resource_blocks
+
+        return expected_load
+
     def gather_state(
             self
     ) -> ndarray:
+        """
+        Gather a vector-shape feature representation of the current simulation state
+        """
         # rb requested per user, normalized to rb available
         rb_requested = zeros(self.config.num_users)
         for user in self.users.values():
@@ -174,7 +190,7 @@ class Simulation:
             self,
             percentage_allocation_solution: ndarray,
     ) -> (float, dict):
-        # Allocate
+        # allocate rb according to allocation action
         allocated_rb_per_ue = self.allocate(percentage_allocation_solution=percentage_allocation_solution)
 
         # calculate capacity
@@ -189,10 +205,9 @@ class Simulation:
             for job in ue.jobs:
                 job.delay_steps += 1
 
-        # remove timed out jobs
+        # remove timed out jobs, calculate timeouts
         sum_normal_timeouts = 0
         sum_priority_timeouts = 0
-
         for ue in self.users.values():
             deletion_list = []
             for job in ue.jobs:
@@ -212,6 +227,7 @@ class Simulation:
         # print('r2 {}'.format(sum_timeouts))
         # print('r3 {}'.format(sum_priority_timeouts))
 
+        # calculate reward sum
         reward = (0 +
                   self.config.reward_sum_weightings['sum_capacity_kbit_per_second'] * sum_capacity_kbit_per_second +
                   self.config.reward_sum_weightings['sum_normal_timeouts'] * sum_normal_timeouts +
@@ -224,21 +240,11 @@ class Simulation:
             'sum_priority_timeouts': sum_priority_timeouts,
         }
 
+        # move simulation to new state
         self.update_user_channel_fading()
         self.generate_new_jobs()
 
         return reward, unweighted_reward_components
-
-    def get_expected_load(
-            self,
-    ) -> float:
-        expected_rb = 0
-        for ue in self.users.values():
-            mean_job_size = (1 + ue.max_job_size_rb) / 2
-            expected_rb += self.config.job_creation_probability * mean_job_size
-        expected_load = expected_rb / self.res_grid.total_resource_blocks
-
-        return expected_load
 
     def reset(
             self

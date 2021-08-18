@@ -66,7 +66,7 @@ class Runner:
     ) -> bool:
         """Train policy networks only every k steps and/or only after j total steps to ensure a good value function"""
         if (
-            simulation_step > self.config.train_policy_after_j
+            simulation_step > self.config.train_policy_after_j_steps
             and
             (simulation_step % self.config.train_policy_every_k) == 0
         ):
@@ -76,24 +76,33 @@ class Runner:
     def add_random_distribution(
             self,
             action: ndarray,  # turns out its much faster to numpy the tensor and then do operations on ndarray
-            tau_momentum: float,
+            tau_momentum: float,  # tau * random_distribution + (1 - tau) * action
     ) -> ndarray:
+        """
+        Mix an action vector with a random_uniform vector of same length
+        by tau * random_distribution + (1 - tau) * action
+        """
         if tau_momentum == 0.0:
             return action
 
+        # create random action
         random_distribution = self.rng.random(size=self.config.num_actions_policy, dtype='float32')
         random_distribution = random_distribution / sum(random_distribution)
 
+        # combine
         noisy_action = tau_momentum * random_distribution + (1 - tau_momentum) * action
-        if sum(noisy_action) != 0:
-            noisy_action = noisy_action / sum(noisy_action)
+
+        # normalize
+        sum_noisy_action = sum(noisy_action)
+        if sum_noisy_action != 0:
+            noisy_action = noisy_action / sum_noisy_action
 
         return noisy_action
 
     def train_critical_events(
             self,
     ) -> None:
-        def progress_print():
+        def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
             timedelta = datetime.now() - real_time_start
             finish_time = real_time_start + timedelta / progress
@@ -101,7 +110,7 @@ class Runner:
             print('\rSimulation completed: {:.2%}, est. finish {:02d}:{:02d}:{:02d}'.format(
                 progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
 
-        def save_networks():
+        def save_networks() -> None:
             state = sim.gather_state()
             action = allocator.get_action(state)
 
@@ -115,7 +124,20 @@ class Runner:
 
             copy2(join(dirname(__file__), 'config.py'), self.config.model_path)
 
-        # setup------------------------------------------
+        def anneal_parameters() -> tuple:
+            if simulation_step > self.config.exploration_noise_step_start_decay:
+                exploration_noise_momentum_new = max(
+                    0.0,
+                    exploration_noise_momentum - self.config.exploration_noise_linear_decay_per_step
+                )
+            else:
+                exploration_noise_momentum_new = exploration_noise_momentum
+
+            return (
+                exploration_noise_momentum_new,
+            )
+
+        # setup---------------------------------------------------------------------------------------------------------
         training_name = 'training_critical_events'
         real_time_start = datetime.now()
 
@@ -139,10 +161,8 @@ class Runner:
             'final': [],
             'fisher': [],
         }
-        # ###############################################
-        # fisher = []
 
-        # main loop--------------------------------------
+        # main loop-----------------------------------------------------------------------------------------------------
         per_episode_metrics: dict = {
             'reward_per_step': -infty * ones(self.config.num_episodes),
             'value_loss_mean': +infty * ones(self.config.num_episodes),
@@ -154,102 +174,107 @@ class Runner:
             }
 
             step_experience: dict = {'state': 0, 'action': 0, 'reward': 0, 'next_state': 0}
-            state_next = sim.gather_state()
-            if episode_id == 0:  # initialize network to log initial params
+            state_next: ndarray = sim.gather_state()
+
+            # initialize network & log initial params
+            if episode_id == 0:
                 allocator.networks['policy']['primary'].initialize_inputs(state_next[newaxis])
                 policy_parameters['initial'] = allocator.get_policy_params('primary')
 
             for step_id in range(self.config.num_steps_per_episode):
                 simulation_step = episode_id * self.config.num_steps_per_episode + step_id
 
+                # determine state
                 state_current = state_next
                 step_experience['state'] = state_current
 
+                # find allocation action based on state
                 bandwidth_allocation_solution = allocator.get_action(state_current).numpy()
                 noisy_bandwidth_allocation_solution = self.add_random_distribution(
                         action=bandwidth_allocation_solution,
                         tau_momentum=exploration_noise_momentum)
                 step_experience['action'] = noisy_bandwidth_allocation_solution
 
+                # step simulation based on action
                 (
                     step_reward,
                     unweighted_step_reward_components,
                 ) = sim.step(percentage_allocation_solution=noisy_bandwidth_allocation_solution)
                 step_experience['reward'] = step_reward
 
+                # determine new state
                 state_next = sim.gather_state()
                 step_experience['next_state'] = state_next
 
+                # save tuple (S, A, r, S_{new})
                 allocator.add_experience(**step_experience)
 
+                # train allocator off-policy
                 train_policy = False
                 if self.policy_training_criterion(simulation_step=simulation_step):
                     train_policy = True
                 step_allocation_value1_loss = allocator.train(
-                    training_noise_std=self.config.training_noise_std,
-                    training_noise_clip=self.config.training_noise_clip,
-                    tau_target_update=self.config.tau_target_update,
-                    train_policy=train_policy)
+                    train_policy=train_policy,
+                    **self.config.training_args,
+                )
 
-                # ##########################################
-                # if simulation_step > 0.8 * self.config.steps_total:
-                #     fisher.append(allocator.get_policy_fisher_diagonal_estimate('primary'))
+                # anneal parameters
+                (
+                    exploration_noise_momentum,
+                ) = anneal_parameters()
 
-                if simulation_step > self.config.exploration_noise_step_start_decay:
-                    exploration_noise_momentum = max(
-                        0.0,
-                        exploration_noise_momentum - self.config.exploration_noise_linear_decay_per_step
-                    )
-
-                # log
+                # log step results
                 episode_metrics['rewards'][step_id] = step_experience['reward']
                 episode_metrics['value_losses'][step_id] = step_allocation_value1_loss
 
-                # Progress print----------------------------------------------------------------------------------------
+                # progress print
                 if step_id % 50 == 0:
                     progress_print()
-                # ------------------------------------------------------------------------------------------------------
-            # log
+
+            # log episode results
             # Remove NaN entries, e.g. steps in which there was no training -> None loss
             episode_metrics['value_losses'] = episode_metrics['value_losses'][~isnan(episode_metrics['value_losses'])]
 
             per_episode_metrics['reward_per_step'][episode_id] = (
-                    sum(episode_metrics['rewards']) / self.config.num_steps_per_episode)
+                    sum(episode_metrics['rewards']) / self.config.num_steps_per_episode
+            )
             per_episode_metrics['value_loss_mean'][episode_id] = (
-                    mean(episode_metrics['value_losses']))
+                    mean(episode_metrics['value_losses'])
+            )
 
+            # print episode results
             print('\n', end='')
             print('episode per step reward: {:.2f}'.format(
-                sum(episode_metrics['rewards']) / self.config.num_steps_per_episode))
+                sum(episode_metrics['rewards']) / self.config.num_steps_per_episode)
+            )
             print('episode mean value loss: {:.2f}'.format(
-                mean(episode_metrics['value_losses'])))
+                mean(episode_metrics['value_losses']))
+            )
 
+            # reset simulation for next episode
             sim.reset()
 
-        # teardown---------------------------------------
+        # teardown------------------------------------------------------------------------------------------------------
         policy_parameters['final'] = allocator.get_policy_params('target')
         policy_parameters['fisher'] = allocator.get_policy_fisher_diagonal_estimate('primary')
 
+        # save trained networks locally
         save_networks()
 
-        # log
+        # save logged results
         # TODO: save logs
         with gzip_open(join(self.config.model_path, 'policy_parameters_' + training_name + '.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
 
+        # end compute performance profiling
         if self.config.toggle_profiling:
             self.profiler.disable()
             self.profiler.print_stats(sort='cumulative')
             self.profiler.dump_stats(join(self.config.performance_profile_path, training_name + '.profile'))
 
-        # plots------------------------------------------
+        # plots
         plot_scatter_plot(per_episode_metrics['reward_per_step'], title='Per Step Reward')
         plot_scatter_plot(per_episode_metrics['value_loss_mean'], title='Mean Value Loss')
-
-        ################################################
-        # from numpy import array
-        # fisher = array(fisher)
-        # plot_scatter_plot(fisher[:, 0], title='aaaaaaaaaa')
 
     def test_critical_events(
             self,
@@ -257,7 +282,7 @@ class Runner:
             policy_network_path: None or str = None,
             policy_pruning_parameters_path: None or str = None,
     ) -> None:
-        def progress_print():
+        def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
             timedelta = datetime.now() - real_time_start
             finish_time = real_time_start + timedelta / progress
@@ -265,7 +290,7 @@ class Runner:
             print('\rSimulation completed: {:.2%}, est. finish {:02d}:{:02d}:{:02d}'.format(
                 progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
 
-        # setup----------------------------------------------------
+        # setup---------------------------------------------------------------------------------------------------------
         real_time_start = datetime.now()
         if self.config.toggle_profiling:
             self.profiler.enable()
@@ -276,7 +301,7 @@ class Runner:
         )
         print('Expected load: {:.2f}'.format(sim.get_expected_load()))
 
-        # define allocation function-------------------------------
+        # define allocation function
         if allocator == 'pretrained':
             allocator_network = load_model(policy_network_path)
 
@@ -284,7 +309,6 @@ class Runner:
                 return allocator_network.call(state_current[newaxis]).numpy().squeeze()
 
             if self.config.prune_network:
-                # Prune
                 with gzip_open(join(self.config.model_path, policy_pruning_parameters_path), 'rb') as file:
                     training_parameters_initial = pickle_load(file=file)['initial']
                 parameters_new = prune_network(
@@ -298,56 +322,66 @@ class Runner:
                 solution = self.rng.random(self.config.num_actions_policy)
                 return solution / sum(solution)
         else:
-            def allocate_state_current(): pass
+            def allocate_state_current() -> None: pass
             print('invalid allocator')
             exit()
 
-        # main loop------------------------------------------------
+        # main loop-----------------------------------------------------------------------------------------------------
         per_episode_metrics: dict = {
-            'reward_per_step': -1_000 * ones(self.config.num_episodes),
+            'reward_per_step': -infty * ones(self.config.num_episodes),
         }
         for episode_id in range(self.config.num_episodes):
             episode_metrics: dict = {
-                'rewards': -1_000 * ones(self.config.num_steps_per_episode),
+                'rewards': -infty * ones(self.config.num_steps_per_episode),
             }
 
             state_next = sim.gather_state()
             for step_id in range(self.config.num_steps_per_episode):
                 simulation_step = episode_id * self.config.num_steps_per_episode + step_id
 
+                # determine state
                 state_current = state_next
-                bandwidth_allocation_solution = allocate_state_current()
 
+                # find allocation action based on state
+                bandwidth_allocation_solution = allocate_state_current()
                 noisy_bandwidth_allocation_solution = bandwidth_allocation_solution
 
+                # step simulation based on action
                 (
                     step_reward,
                     unweighted_step_reward_components,
                 ) = sim.step(percentage_allocation_solution=noisy_bandwidth_allocation_solution)
+
+                # determine new state
                 state_next = sim.gather_state()
 
+                # log step results
                 episode_metrics['rewards'][step_id] = step_reward
 
-                # Progress print--------------------------------------------
+                # progress print
                 if step_id % 50 == 0:
                     progress_print()
 
+            # log episode results
             per_episode_metrics['reward_per_step'][episode_id] = (
                     sum(episode_metrics['rewards']) / self.config.num_steps_per_episode)
 
+            # print episode results
             print('\n', end='')
             print('episode per step reward: {:.2f}'.format(
                 sum(episode_metrics['rewards']) / self.config.num_steps_per_episode))
 
+            # reset simulation for next episode
             sim.reset()
 
-        # teardown-------------------------------------------------
+        # teardown------------------------------------------------------------------------------------------------------
+        # end compute performance profiling
         if self.config.toggle_profiling:
             self.profiler.disable()
             self.profiler.print_stats(sort='cumulative')
             self.profiler.dump_stats('train_critical_events.profile')
 
-        # plots----------------------------------------------------
+        # plots
         plot_scatter_plot(per_episode_metrics['reward_per_step'], title='Per Step Reward')
 
     def train_no_critical_events(
@@ -366,7 +400,7 @@ class Runner:
             policy_network_path: None or str = None,
             anchoring_parameters_path: None or str = None,
     ) -> None:
-        def progress_print():
+        def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
             timedelta = datetime.now() - real_time_start
             finish_time = real_time_start + timedelta / progress
@@ -374,7 +408,7 @@ class Runner:
             print('\rSimulation completed: {:.2%}, est. finish {:02d}:{:02d}:{:02d}'.format(
                 progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
 
-        def save_networks():
+        def save_networks() -> None:
             state = sim.gather_state()
             action = allocator.get_action(state)
 
@@ -388,7 +422,20 @@ class Runner:
 
             copy2(join(dirname(__file__), 'config.py'), self.config.model_path)
 
-        # setup------------------------------------------
+        def anneal_parameters() -> tuple:
+            if simulation_step > self.config.exploration_noise_step_start_decay:
+                exploration_noise_momentum_new = max(
+                    0.0,
+                    exploration_noise_momentum - self.config.exploration_noise_linear_decay_per_step
+                )
+            else:
+                exploration_noise_momentum_new = exploration_noise_momentum
+
+            return (
+                exploration_noise_momentum_new,
+            )
+
+        # setup---------------------------------------------------------------------------------------------------------
         training_name = 'training_random_data'
         real_time_start = datetime.now()
 
@@ -405,10 +452,12 @@ class Runner:
             name='allocator',
             **self.config.td3_args
         )
+
         # load pretrained
         if value_network_path:
             allocator.load_pretrained_networks(value_path=value_network_path,
                                                policy_path=policy_network_path)
+
         # load anchoring
         policy_parameters_anchor = None
         policy_parameters_fisher = None
@@ -425,13 +474,14 @@ class Runner:
             'final': [],
             'fisher': [],
         }
+
+        # main loop-----------------------------------------------------------------------------------------------------
         per_episode_metrics: dict = {
             'reward_per_step': -infty * ones(self.config.num_episodes),
             'value_loss_mean': +infty * ones(self.config.num_episodes),
         }
         state_shape = sim.gather_state().shape
 
-        # main loop--------------------------------------
         for episode_id in range(self.config.num_episodes):
             episode_metrics: dict = {
                 'rewards': -infty * ones(self.config.num_steps_per_episode),
@@ -441,7 +491,7 @@ class Runner:
             step_experience: dict = {'state': 0, 'action': 0, 'reward': 0, 'next_state': 0}
             state_next = self.rng.random(state_shape)
 
-            # initialize network to log initial params
+            # initialize network & log initial params
             if episode_id == 0 and not value_network_path:  # no pre-trained loaded
                 allocator.networks['policy']['primary'].initialize_inputs(state_next[newaxis])
                 policy_parameters['initial'] = allocator.get_policy_params('primary')
@@ -449,58 +499,56 @@ class Runner:
             for step_id in range(self.config.num_steps_per_episode):
                 simulation_step = episode_id * self.config.num_steps_per_episode + step_id
 
+                # determine state
                 state_current = state_next
                 step_experience['state'] = state_current
 
+                # find allocation action based on state
                 bandwidth_allocation_solution = allocator.get_action(state_current).numpy()
                 noisy_bandwidth_allocation_solution = self.add_random_distribution(
                         action=bandwidth_allocation_solution,
                         tau_momentum=exploration_noise_momentum)
                 step_experience['action'] = noisy_bandwidth_allocation_solution
 
+                # step simulation based on action
                 (
                     step_reward,
                     unweighted_step_reward_components,
                 ) = sim.step(percentage_allocation_solution=noisy_bandwidth_allocation_solution)
                 step_experience['reward'] = self.rng.random()
 
+                # determine new state
                 state_next = self.rng.random(state_shape)
                 step_experience['next_state'] = state_next
 
+                # save tuple (S, A, r, S_{new})
                 allocator.add_experience(**step_experience)
 
+                # train allocator off-policy
                 train_policy = False
                 if self.policy_training_criterion(simulation_step=simulation_step):
                     train_policy = True
                 step_allocation_value1_loss = allocator.train(
-                    training_noise_std=self.config.training_noise_std,
-                    training_noise_clip=self.config.training_noise_clip,
-                    tau_target_update=self.config.tau_target_update,
                     train_policy=train_policy,
-                    weight_anchoring_lambda=self.config.anchoring_weight_lambda,
                     policy_parameters_anchor=policy_parameters_anchor,
                     policy_parameters_fisher=policy_parameters_fisher,
+                    **self.config.training_args,
                 )
 
-                # ##########################################
-                # if simulation_step > 0.8 * self.config.steps_total:
-                #     fisher.append(allocator.get_policy_fisher_diagonal_estimate('primary'))
+                # anneal parameters
+                (
+                    exploration_noise_momentum,
+                ) = anneal_parameters()
 
-                if simulation_step > self.config.exploration_noise_step_start_decay:
-                    exploration_noise_momentum = max(
-                        0.0,
-                        exploration_noise_momentum - self.config.exploration_noise_linear_decay_per_step
-                    )
-
-                # log
+                # log step results
                 episode_metrics['rewards'][step_id] = step_reward
                 episode_metrics['value_losses'][step_id] = step_allocation_value1_loss
 
-                # Progress print----------------------------------------------------------------------------------------
+                # progress print
                 if step_id % 50 == 0:
                     progress_print()
 
-            # log
+            # log episode results
             # Remove NaN entries, e.g. steps in which there was no training -> None loss
             episode_metrics['value_losses'] = episode_metrics['value_losses'][~isnan(episode_metrics['value_losses'])]
 
@@ -509,30 +557,34 @@ class Runner:
             per_episode_metrics['value_loss_mean'][episode_id] = (
                     mean(episode_metrics['value_losses']))
 
+            # print episode results
             print('\n', end='')
             print('episode per step reward: {:.2f}'.format(
                 sum(episode_metrics['rewards']) / self.config.num_steps_per_episode))
             print('episode mean value loss: {:.2f}'.format(
                 mean(episode_metrics['value_losses'])))
 
+            # reset simulation for next episode
             sim.reset()
 
-        # teardown---------------------------------------
+        # teardown------------------------------------------------------------------------------------------------------
         policy_parameters['final'] = allocator.get_policy_params('target')
         policy_parameters['fisher'] = allocator.get_policy_fisher_diagonal_estimate('primary')
 
+        # save trained networks locally
         save_networks()
 
-        # log
+        # save logged results
         # TODO: save logs
         with gzip_open(join(self.config.model_path, 'policy_parameters_' + training_name + '.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
 
+        # end compute performance profiling
         if self.config.toggle_profiling:
             self.profiler.disable()
             self.profiler.print_stats(sort='cumulative')
             self.profiler.dump_stats(join(self.config.performance_profile_path, training_name + '.profile'))
 
-        # plots------------------------------------------
+        # plots
         plot_scatter_plot(per_episode_metrics['reward_per_step'], title='Per Step Reward')
         plot_scatter_plot(per_episode_metrics['value_loss_mean'], title='Mean Value Loss')
