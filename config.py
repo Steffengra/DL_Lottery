@@ -5,6 +5,9 @@ from numpy import (
     ceil,
     floor
 )
+from os import (
+    makedirs,
+)
 from os.path import (
     join,
     dirname
@@ -20,13 +23,13 @@ from DL_Lottery_imports.dl_internals_with_expl import (
 
 class Config:
     def __init__(
-            self
+            self,
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
         self.toggle_profiling: bool = False  # compute performance profiling
 
         # Simulation Environment Parameters-----------------------------------------
-        simulation_title: str = 'test'
+        simulation_title: str = 'anchoring_random_training'
 
         simulation_length_seconds: int = 1
         self.num_episodes: int = 10
@@ -214,6 +217,8 @@ class Config:
         self.model_path: str = join(dirname(__file__), 'SavedModels', simulation_title)
         self.log_path: str = join(dirname(__file__), 'logs', simulation_title)
         self.performance_profile_path: str = join(dirname(__file__), 'performance_profiles')
+        makedirs(self.model_path, exist_ok=True)
+        makedirs(self.log_path, exist_ok=True)
 
         # Internal------------------------------------------------------------------
         self.num_steps_per_episode: int = int(

@@ -6,9 +6,9 @@ venv/
 tests/
 SavedModels/
 plotting/
-ignore/
-performance_profiles/
 logs/
+performance_profiles/
+ignore/
 
 # Files
 *.pdf

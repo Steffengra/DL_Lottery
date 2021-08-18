@@ -101,6 +101,7 @@ class Runner:
 
     def train_critical_events(
             self,
+            name: str = '',
     ) -> None:
         def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
@@ -138,7 +139,7 @@ class Runner:
             )
 
         # setup---------------------------------------------------------------------------------------------------------
-        training_name = 'training_critical_events'
+        training_name = 'training_critical_events' + name
         real_time_start = datetime.now()
 
         if self.config.toggle_profiling:
@@ -156,17 +157,17 @@ class Runner:
 
         exploration_noise_momentum = self.config.exploration_noise_momentum_initial
 
+        # main loop-----------------------------------------------------------------------------------------------------
+        per_episode_metrics: dict = {
+            'reward_per_step': -infty * ones(self.config.num_episodes),
+            'value_loss_mean': +infty * ones(self.config.num_episodes),
+        }
         policy_parameters: dict = {
             'initial': [],
             'final': [],
             'fisher': [],
         }
 
-        # main loop-----------------------------------------------------------------------------------------------------
-        per_episode_metrics: dict = {
-            'reward_per_step': -infty * ones(self.config.num_episodes),
-            'value_loss_mean': +infty * ones(self.config.num_episodes),
-        }
         for episode_id in range(self.config.num_episodes):
             episode_metrics: dict = {
                 'rewards': -infty * ones(self.config.num_steps_per_episode),
@@ -262,7 +263,8 @@ class Runner:
         save_networks()
 
         # save logged results
-        # TODO: save logs
+        with gzip_open(join(self.config.log_path, training_name + '_per_episode_metrics.gzip'), 'wb') as file:
+            pickle_dump(per_episode_metrics, file=file)
         with gzip_open(join(self.config.model_path, 'policy_parameters_' + training_name + '.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
 
@@ -281,6 +283,7 @@ class Runner:
             allocator: str,  # 'pretrained', 'random'
             policy_network_path: None or str = None,
             policy_pruning_parameters_path: None or str = None,
+            name: str = '',
     ) -> None:
         def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
@@ -291,6 +294,7 @@ class Runner:
                 progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
 
         # setup---------------------------------------------------------------------------------------------------------
+        testing_name = 'testing_critical_events' + name
         real_time_start = datetime.now()
         if self.config.toggle_profiling:
             self.profiler.enable()
@@ -375,6 +379,10 @@ class Runner:
             sim.reset()
 
         # teardown------------------------------------------------------------------------------------------------------
+        # save logged results
+        with gzip_open(join(self.config.log_path, testing_name + '_per_episode_metrics.gzip'), 'wb') as file:
+            pickle_dump(per_episode_metrics, file=file)
+
         # end compute performance profiling
         if self.config.toggle_profiling:
             self.profiler.disable()
@@ -399,6 +407,7 @@ class Runner:
             value_network_path: None or str = None,
             policy_network_path: None or str = None,
             anchoring_parameters_path: None or str = None,
+            name: str = '',
     ) -> None:
         def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
@@ -436,7 +445,7 @@ class Runner:
             )
 
         # setup---------------------------------------------------------------------------------------------------------
-        training_name = 'training_random_data'
+        training_name = 'training_random_data' + name
         real_time_start = datetime.now()
 
         if self.config.toggle_profiling:
@@ -575,7 +584,9 @@ class Runner:
         save_networks()
 
         # save logged results
-        # TODO: save logs
+        with gzip_open(join(self.config.log_path, training_name + '_per_episode_metrics.gzip'), 'wb') as file:
+            pickle_dump(per_episode_metrics, file=file)
+
         with gzip_open(join(self.config.model_path, 'policy_parameters_' + training_name + '.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
 
