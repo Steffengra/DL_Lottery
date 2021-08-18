@@ -439,7 +439,7 @@ class Runner:
             }
 
             step_experience: dict = {'state': 0, 'action': 0, 'reward': 0, 'next_state': 0}
-            state_next = self.rng.random(state_shape)  # TODO: Maybe normalize
+            state_next = self.rng.random(state_shape)
 
             # initialize network to log initial params
             if episode_id == 0 and not value_network_path:  # no pre-trained loaded
@@ -464,7 +464,7 @@ class Runner:
                 ) = sim.step(percentage_allocation_solution=noisy_bandwidth_allocation_solution)
                 step_experience['reward'] = self.rng.random()
 
-                state_next = self.rng.random(state_shape)  # TODO: Maybe normalize
+                state_next = self.rng.random(state_shape)
                 step_experience['next_state'] = state_next
 
                 allocator.add_experience(**step_experience)

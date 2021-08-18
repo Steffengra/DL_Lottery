@@ -18,8 +18,8 @@ def main():
     config = Config()
     runner = Runner()
 
-    # shutdown_on_complete = False
-    shutdown_on_complete = True
+    shutdown_on_complete = False
+    # shutdown_on_complete = True
 
     runner.train_critical_events()
 

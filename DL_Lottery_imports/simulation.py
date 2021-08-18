@@ -118,12 +118,6 @@ class Simulation:
                     deletion_list.append(job)
                 if available_rb == 0:
                     break
-                if job.size_rb < 0:  # TODO: Remove if everything works
-                    print('job size < 0')
-                    exit()
-                if available_rb < 0:  # TODO: Remove if everything works
-                    print('available rb per ue < 0')
-                    exit()
 
             return allocated_rb, deletion_list
 
@@ -206,16 +200,10 @@ class Simulation:
                     if job.delay_steps == self.config.timeout_step['priority']:
                         deletion_list.append(job)
                         sum_priority_timeouts += 1
-                    elif job.delay_steps > self.config.timeout_step['priority']:  # TODO: remove if working
-                        print('prio job delay greater max delay')
-                        exit()
                 else:
                     if job.delay_steps == self.config.timeout_step['normal']:
                         deletion_list.append(job)
                         sum_normal_timeouts += 1
-                    elif job.delay_steps > self.config.timeout_step['normal']:  # TODO: remove if working
-                        print('job delay greater max delay')
-                        exit()
 
             for job in deletion_list:
                 ue.jobs.remove(job)

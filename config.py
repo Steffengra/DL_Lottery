@@ -24,7 +24,7 @@ class Config:
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
         # Simulation Environment Parameters-----------------------------------------
-        simulation_title: str = 'test'
+        simulation_title: str = 'anchoring_random_training'
         simulation_length_seconds: int = 1
         self.num_episodes: int = 10
 
