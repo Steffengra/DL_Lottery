@@ -1,0 +1,25 @@
+
+# Folders
+__pycache__/
+.idea/
+venv/
+tests/
+SavedModels/
+plotting/
+ignore/
+
+# Files
+*.pdf
+*.pgf
+*.stor
+*.gstor
+*.zip
+*.gzip
+*.bu
+*.h5
+*.profile
+*.csv
+*.dat
+
+load_profile.py
+test?.py
