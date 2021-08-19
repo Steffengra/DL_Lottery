@@ -50,6 +50,24 @@ class Simulation:
             if self.rng.random() < self.config.job_creation_probability:
                 ue.generate_job()
 
+    def insert_priority_job(
+            self
+    ) -> None:
+        # TODO: This may turn an already delayed job to priority. Is this a problem?
+        attempts = 0
+        while attempts < 8:
+            random_ue_id = self.rng.choice(list(self.users.keys()))
+            ue_jobs = self.users[random_ue_id].jobs
+            if ue_jobs:
+                random_job_id = self.rng.choice(range(len(self.users[random_ue_id].jobs)))
+                random_job = self.users[random_ue_id].jobs[random_job_id]
+                if random_job.priority == 0:
+                    random_job.set_priority()
+                    return
+            attempts += 1
+        # if self.config.verbosity == 1:
+        #     print('Could not assign a priority job')
+
     def update_user_channel_fading(
             self,
     ) -> None:
@@ -182,13 +200,15 @@ class Simulation:
         # TODO: Unallocated rb
         # unallocated_rb = self.res_grid.total_resource_blocks - sum(allocated_rb_per_ue.values())
         # if unallocated_rb > 0:
-        #     print('{} rb left unallocated'.format(unallocated_rb))
+        #     if self.config.verbosity == 1:
+        #         print('{} rb left unallocated'.format(unallocated_rb))
 
         return allocated_rb_per_ue
 
     def step(
             self,
             percentage_allocation_solution: ndarray,
+            critical_events_chance: float,  # 1 in x
     ) -> (float, dict):
         # allocate rb according to allocation action
         allocated_rb_per_ue = self.allocate(percentage_allocation_solution=percentage_allocation_solution)
@@ -212,27 +232,28 @@ class Simulation:
             deletion_list = []
             for job in ue.jobs:
                 if job.priority == 1:
-                    if job.delay_steps == self.config.timeout_step['priority']:
+                    if job.delay_steps >= self.config.timeout_step['priority']:
                         deletion_list.append(job)
                         sum_priority_timeouts += 1
                 else:
-                    if job.delay_steps == self.config.timeout_step['normal']:
+                    if job.delay_steps >= self.config.timeout_step['normal']:
                         deletion_list.append(job)
                         sum_normal_timeouts += 1
 
             for job in deletion_list:
                 ue.jobs.remove(job)
 
-        # print('r1 {}'.format(sum_capacity_kbit_per_second))
-        # print('r2 {}'.format(sum_timeouts))
-        # print('r3 {}'.format(sum_priority_timeouts))
+        # if self.config.verbosity == 1:
+            # print('r1 {}'.format(sum_capacity_kbit_per_second))
+            # print('r2 {}'.format(sum_timeouts))
+            # print('r3 {}'.format(sum_priority_timeouts))
 
         # calculate reward sum
-        reward = (0 +
-                  self.config.reward_sum_weightings['sum_capacity_kbit_per_second'] * sum_capacity_kbit_per_second +
-                  self.config.reward_sum_weightings['sum_normal_timeouts'] * sum_normal_timeouts +
-                  self.config.reward_sum_weightings['sum_priority_timeouts'] * sum_priority_timeouts +
-                  0)
+        reward = (
+                + self.config.reward_sum_weightings['sum_capacity_kbit_per_second'] * sum_capacity_kbit_per_second
+                + self.config.reward_sum_weightings['sum_normal_timeouts'] * sum_normal_timeouts
+                + self.config.reward_sum_weightings['sum_priority_timeouts'] * sum_priority_timeouts
+        )
 
         unweighted_reward_components = {
             'sum_capacity_kbit_per_second': sum_capacity_kbit_per_second,
@@ -243,6 +264,8 @@ class Simulation:
         # move simulation to new state
         self.update_user_channel_fading()
         self.generate_new_jobs()
+        if self.rng.random() < critical_events_chance:
+            self.insert_priority_job()  # turn 1 job into priority job at a chance
 
         return reward, unweighted_reward_components
 

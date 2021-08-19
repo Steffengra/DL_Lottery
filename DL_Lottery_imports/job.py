@@ -11,3 +11,8 @@ class Job:
         self.size_rb = size_rb
         self.delay_steps = 0
         self.priority = 0
+
+    def set_priority(
+            self,
+    ) -> None:
+        self.priority = 1

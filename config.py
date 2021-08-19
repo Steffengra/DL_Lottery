@@ -26,13 +26,14 @@ class Config:
             self,
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
+        simulation_title: str = 'anchoring_critical_allocation'
+        self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.toggle_profiling: bool = False  # compute performance profiling
 
         # Simulation Environment Parameters-----------------------------------------
-        simulation_title: str = 'anchoring_random_training'
-
-        simulation_length_seconds: int = 1
-        self.num_episodes: int = 10
+        self.num_episodes: int = 1
+        # simulation_length_seconds: int = 1
+        self.num_steps_per_episode: int = 500
         self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
 
         # load related
@@ -48,10 +49,13 @@ class Config:
         self.ue_rayleigh_fading_scale: float = .1  # for capacity
         self.ue_position_range: dict = {'low': -100, 'high': 100}  # for capacity
         # self.ue_path_loss_exponent: float = 2  # for capacity
+
+        self.normal_priority_job_probability: float = 1/10_000
         self.timeout_step: dict = {  # after how many time delays is a job timed out?
             'normal': 5,
             'priority': 1,
         }
+
         self.reward_sum_weightings: dict = {
             'sum_capacity_kbit_per_second': + 1.0,
             'sum_normal_timeouts': - 1.0,  # not including priority jobs
@@ -89,7 +93,7 @@ class Config:
         # Training-----------
         self.future_reward_discount_gamma_allocation: float = 0.00
         self.train_policy_every_k: int = 1  # td3 waits a number of value net updates before updating policy net
-        train_policy_after_j: float = 0.0  # start training policy after j% of simulation steps
+        self.train_policy_after_j_percent: float = 0.0  # start training policy after j% of simulation steps
 
         self.training_noise_std: float = 1e-2  # introduce a small amount of noise onto the policy in value training..
         self.training_noise_clip: float = 0.05  # ..to avoid narrow peaks in value function
@@ -105,8 +109,8 @@ class Config:
 
         # Exploration--------
         self.exploration_noise_momentum_initial: float = 1.0
-        exploration_noise_decay_start: float = 0.0  # After which % of training to start decay
-        exploration_noise_decay_threshold: float = 0.5
+        self.exploration_noise_decay_start_percent: float = 0.0  # After which % of training to start decay
+        self.exploration_noise_decay_threshold_percent: float = 0.5
         # value_based_exploration_interval: dict[str: float] = {'start': 1.0, 'end': 1.0}
         # self.value_based_exploration_config: dict[str: float] = {
         #     'tau_moving_average': 0.99,
@@ -221,9 +225,9 @@ class Config:
         makedirs(self.log_path, exist_ok=True)
 
         # Internal------------------------------------------------------------------
-        self.num_steps_per_episode: int = int(
-            simulation_length_seconds / self.duration_subframe_s * self.symbols_per_subframe
-        )
+        # self.num_steps_per_episode: int = int(
+        #     simulation_length_seconds / self.duration_subframe_s * self.symbols_per_subframe
+        # )
         self.steps_total: int = self.num_episodes * self.num_steps_per_episode
 
         self.pos_base_station: ndarray = array([0, 0])
@@ -231,12 +235,12 @@ class Config:
 
         # Exploration--------------
         self.exploration_noise_step_start_decay: int = ceil(
-            exploration_noise_decay_start * self.num_episodes * self.num_steps_per_episode
+            self.exploration_noise_decay_start_percent * self.num_episodes * self.num_steps_per_episode
         )
 
         self.exploration_noise_linear_decay_per_step: float = (
             self.exploration_noise_momentum_initial / (
-                exploration_noise_decay_threshold * (
+                self.exploration_noise_decay_threshold_percent * (
                     self.num_episodes * self.num_steps_per_episode - self.exploration_noise_step_start_decay
                 )
             )
@@ -248,7 +252,7 @@ class Config:
         #     value_based_exploration_interval['end'] * self.steps_total)
 
         self.train_policy_after_j_steps: int = floor(
-            train_policy_after_j * self.num_episodes * self.num_steps_per_episode
+            self.train_policy_after_j_percent * self.num_episodes * self.num_steps_per_episode
         )
 
         self.td3_args = {
@@ -287,3 +291,23 @@ class Config:
         self.ccolor2: str = '#254796'  # use for scatter, blue
         self.ccolor3: str = '#307b3b'  # use for scatter, green
         self.ccolor4: str = '#caa023'  # use for scatter, gold
+
+    def update_num_steps_per_episode(
+            self,
+            new_steps_per_episode: int,
+    ) -> None:
+        self.num_steps_per_episode = new_steps_per_episode
+        self.steps_total: int = self.num_episodes * self.num_steps_per_episode
+        self.exploration_noise_step_start_decay: int = ceil(
+            self.exploration_noise_decay_start_percent * self.num_episodes * self.num_steps_per_episode
+        )
+        self.exploration_noise_linear_decay_per_step: float = (
+            self.exploration_noise_momentum_initial / (
+                self.exploration_noise_decay_threshold_percent * (
+                    self.num_episodes * self.num_steps_per_episode - self.exploration_noise_step_start_decay
+                )
+            )
+        )
+        self.train_policy_after_j_steps: int = floor(
+            self.train_policy_after_j_percent * self.num_episodes * self.num_steps_per_episode
+        )

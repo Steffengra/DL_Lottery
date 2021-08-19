@@ -17,8 +17,8 @@ def main():
     config = Config()
     runner = Runner()
 
-    shutdown_on_complete = False
-    # shutdown_on_complete = True
+    # shutdown_on_complete = False
+    shutdown_on_complete = True
 
     # initial training
     runner.train_critical_events()
@@ -44,7 +44,7 @@ def main():
     # test if performance is ruined
     runner.test_critical_events(
         allocator='pretrained',
-        policy_network_path=join(config.model_path, 'actor_allocation_training_random_data'),
+        policy_network_path=join(config.model_path, 'actor_allocation_training_random_data_no_anchoring'),
         policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
         name='_trained_random_no_anchoring'
     )
@@ -59,7 +59,7 @@ def main():
     # test if performance is preserved
     runner.test_critical_events(
         allocator='pretrained',
-        policy_network_path=join(config.model_path, 'actor_allocation_training_random_data'),
+        policy_network_path=join(config.model_path, 'actor_allocation_training_random_data_anchoring'),
         policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
         name='_trained_random_anchoring'
     )
