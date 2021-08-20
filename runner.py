@@ -272,7 +272,8 @@ class Runner:
                 mean(episode_metrics['value_losses'])
             )
             per_episode_metrics['priority_timeouts_per_occurrence'][episode_id] = (
-                sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / probability_critical_events
+                sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / (
+                    probability_critical_events + self.config.tiny_numerical_value)
             )
 
             # print episode results
@@ -285,7 +286,8 @@ class Runner:
                     mean(episode_metrics['value_losses']))
                 )
                 print('episode per occurrence priority timeouts: {:.2f}'.format(
-                    sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / probability_critical_events
+                    sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / (
+                        probability_critical_events + self.config.tiny_numerical_value)
                 ))
 
             # reset simulation for next episode
@@ -312,9 +314,12 @@ class Runner:
             self.profiler.dump_stats(join(self.config.performance_profile_path, training_name + '.profile'))
 
         # plots
-        plot_scatter_plot(per_episode_metrics['reward_per_step'], title='Per Step Reward')
-        plot_scatter_plot(per_episode_metrics['value_loss_mean'], title='Mean Value Loss')
-        plot_scatter_plot(per_episode_metrics['priority_timeouts_per_occurrence'], title='Per Occurrence Priority Timeouts')
+        plot_scatter_plot(per_episode_metrics['reward_per_step'],
+                          title='Per Step Reward')
+        plot_scatter_plot(per_episode_metrics['value_loss_mean'],
+                          title='Mean Value Loss')
+        plot_scatter_plot(per_episode_metrics['priority_timeouts_per_occurrence'],
+                          title='Per Occurrence Priority Timeouts')
 
     def train_critical_events(
             self,
@@ -565,8 +570,10 @@ class Runner:
             self.profiler.dump_stats(join(self.config.performance_profile_path, training_name + '.profile'))
 
         # plots
-        plot_scatter_plot(per_episode_metrics['reward_per_step'], title='Per Step Reward')
-        plot_scatter_plot(per_episode_metrics['value_loss_mean'], title='Mean Value Loss')
+        plot_scatter_plot(per_episode_metrics['reward_per_step'],
+                          title='Per Step Reward')
+        plot_scatter_plot(per_episode_metrics['value_loss_mean'],
+                          title='Mean Value Loss')
 
     def test(
             self,
@@ -671,7 +678,8 @@ class Runner:
                 sum(episode_metrics['rewards']) / self.config.num_steps_per_episode
             )
             per_episode_metrics['priority_timeouts_per_occurrence'][episode_id] = (
-                sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / probability_critical_events
+                sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / (
+                    probability_critical_events + self.config.tiny_numerical_value)
             )
 
             # print episode results
@@ -681,7 +689,8 @@ class Runner:
                     sum(episode_metrics['rewards']) / self.config.num_steps_per_episode
                 ))
                 print('episode per occurrence priority timeouts: {:.2f}'.format(
-                    sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / probability_critical_events
+                    sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / (
+                        probability_critical_events + self.config.tiny_numerical_value)
                 ))
 
             # reset simulation for next episode
@@ -700,5 +709,7 @@ class Runner:
             self.profiler.dump_stats('train_critical_events.profile')
 
         # plots
-        plot_scatter_plot(per_episode_metrics['reward_per_step'], title='Per Step Reward')
-        plot_scatter_plot(per_episode_metrics['priority_timeouts_per_occurrence'], title='Per Occurrence Priority Timeouts')
+        plot_scatter_plot(per_episode_metrics['reward_per_step'],
+                          title='Per Step Reward')
+        plot_scatter_plot(per_episode_metrics['priority_timeouts_per_occurrence'],
+                          title='Per Occurrence Priority Timeouts')

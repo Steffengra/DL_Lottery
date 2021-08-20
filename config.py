@@ -3,7 +3,8 @@ from numpy import (
     ndarray,
     array,
     ceil,
-    floor
+    floor,
+    finfo,
 )
 from os import (
     makedirs,
@@ -26,14 +27,14 @@ class Config:
             self,
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_critical_allocation'
+        simulation_title: str = 'test'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.toggle_profiling: bool = False  # compute performance profiling
 
         # Simulation Environment Parameters-----------------------------------------
-        self.num_episodes: int = 1
+        self.num_episodes: int = 20
         # simulation_length_seconds: int = 1
-        self.num_steps_per_episode: int = 500
+        self.num_steps_per_episode: int = 20_000
         self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
 
         # load related
@@ -79,13 +80,13 @@ class Config:
 
         self.optimizer_critic = optimizer_adam  # 'adam', 'nadam', 'amsgrad'
         self.optimizer_critic_args: dict = {
-            'learning_rate': 1e-4,
+            'learning_rate': 1e-3,
             'epsilon': 1e-8,
             'amsgrad': True
         }
         self.optimizer_actor = optimizer_adam
         self.optimizer_actor_args: dict = {
-            'learning_rate': 1e-4,
+            'learning_rate': 1e-3,
             'epsilon': 1e-8,
             'amsgrad': True
         }
@@ -132,6 +133,7 @@ class Config:
         #     'Low': {'range_initial': [-3, 3], 'step_size_max': .001},
         #     'Static': {'range_initial': [-3, 3], 'step_size_max': 0}
         # }
+        self.tiny_numerical_value = finfo('float32').tiny
 
         self.duration_frame_s: float = 0.01
         self.duration_subframe_s: float = self.duration_frame_s / 10
@@ -301,6 +303,27 @@ class Config:
         self.exploration_noise_step_start_decay: int = ceil(
             self.exploration_noise_decay_start_percent * self.num_episodes * self.num_steps_per_episode
         )
+        self.exploration_noise_linear_decay_per_step: float = (
+            self.exploration_noise_momentum_initial / (
+                self.exploration_noise_decay_threshold_percent * (
+                    self.num_episodes * self.num_steps_per_episode - self.exploration_noise_step_start_decay
+                )
+            )
+        )
+        self.train_policy_after_j_steps: int = floor(
+            self.train_policy_after_j_percent * self.num_episodes * self.num_steps_per_episode
+        )
+
+    def update_num_episodes(
+            self,
+            new_num_episodes: int,
+    ) -> None:
+        self.num_episodes = new_num_episodes
+        self.steps_total: int = self.num_episodes * self.num_steps_per_episode
+        self.exploration_noise_step_start_decay: int = ceil(
+            self.exploration_noise_decay_start_percent * self.num_episodes * self.num_steps_per_episode
+        )
+
         self.exploration_noise_linear_decay_per_step: float = (
             self.exploration_noise_momentum_initial / (
                 self.exploration_noise_decay_threshold_percent * (
