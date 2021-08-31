@@ -144,6 +144,8 @@ class Runner:
 
         # setup---------------------------------------------------------------------------------------------------------
         training_name = training_name
+        if self.config.verbosity == 1:
+            print('\n' + training_name)
         real_time_start = datetime.now()
 
         if self.config.toggle_profiling:
@@ -593,6 +595,8 @@ class Runner:
 
         # setup---------------------------------------------------------------------------------------------------------
         testing_name = 'testing_' + name
+        if self.config.verbosity == 1:
+            print('\n' + testing_name)
         real_time_start = datetime.now()
         if self.config.toggle_profiling:
             self.profiler.enable()

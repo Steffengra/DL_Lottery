@@ -17,36 +17,38 @@ def main():
     config = Config()
     runner = Runner()
 
-    # shutdown_on_complete = False
-    shutdown_on_complete = True
-
     # initial training
-    runner.train_critical_events()
+    runner.train_critical_events(
+        name='base',
+    )
     # random allocation baseline
-    runner.test_critical_events(
+    runner.test(
         allocator='random',
-        name='_random'
+        probability_critical_events=1.0,
+        name='random',
     )
     # trained network results
-    runner.test_critical_events(
-        allocator='pretrained',  # 'random', 'pretrained'
-        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events'),
-        policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
-        name='_trained_1'
+    runner.test(
+        allocator='pretrained',
+        probability_critical_events=1.0,
+        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events_base'),
+        policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
+        name='pretrained',
     )
 
     # train on random without anchoring -> should ruin performance
     runner.train_on_random_data(
-        value_network_path=join(config.model_path, 'critic_allocation_training_critical_events'),
-        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events'),
+        value_network_path=join(config.model_path, 'critic_allocation_training_critical_events_base'),
+        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events_base'),
         name='_no_anchoring'
     )
     # test if performance is ruined
-    runner.test_critical_events(
+    runner.test(
         allocator='pretrained',
+        probability_critical_events=1.0,
         policy_network_path=join(config.model_path, 'actor_allocation_training_random_data_no_anchoring'),
         policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
-        name='_trained_random_no_anchoring'
+        name='trained_random_no_anchoring',
     )
 
     # train on random with anchoring -> performance should be preserved
@@ -54,20 +56,22 @@ def main():
         value_network_path=join(config.model_path, 'critic_allocation_training_critical_events'),
         policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events'),
         anchoring_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
-        name='_anchoring'
+        name='_anchored'
     )
     # test if performance is preserved
-    runner.test_critical_events(
+    runner.test(
         allocator='pretrained',
+        probability_critical_events=1.0,
         policy_network_path=join(config.model_path, 'actor_allocation_training_random_data_anchoring'),
         policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
-        name='_trained_random_anchoring'
+        name='trained_random_anchored'
     )
 
-    if shutdown_on_complete:
+    if config.shutdown_on_complete:
         system('shutdown /h')
 
-    plt_show()
+    if config.show_plots:
+        plt_show()
 
 
 if __name__ == '__main__':
