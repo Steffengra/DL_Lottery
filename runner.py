@@ -162,7 +162,7 @@ class Runner:
             name='allocator',
             **self.config.td3_args
         )
-        # TODO: Do i even want to load the value network? also see train on random data
+
         # load pretrained networks
         if value_network_path:
             allocator.load_pretrained_networks(value_path=value_network_path,
@@ -366,6 +366,22 @@ class Runner:
         self.train(
             training_name='training_normal_' + name,
             probability_critical_events=self.config.normal_priority_job_probability,
+            value_network_path=value_network_path,
+            policy_network_path=policy_network_path,
+            anchoring_parameters_path=anchoring_parameters_path,
+        )
+
+    def train_fifty_percent_critical(
+            self,
+            name: str = '',
+            value_network_path: None or str = None,
+            policy_network_path: None or str = None,
+            anchoring_parameters_path: None or str = None,
+    ):
+        """Wrapper for 50% critical rate"""
+        self.train(
+            training_name='training_fifty_percent_critical_events_' + name,
+            probability_critical_events=0.5,
             value_network_path=value_network_path,
             policy_network_path=policy_network_path,
             anchoring_parameters_path=anchoring_parameters_path,

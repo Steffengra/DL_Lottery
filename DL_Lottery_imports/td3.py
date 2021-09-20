@@ -153,7 +153,6 @@ class TD3ActorCritic:
             value_path: str,
             policy_path: str
     ):
-        # TODO: This loads networks with newly initialized optimizers
         for network in ['value1', 'value2']:
             for network_type in ['primary', 'target']:
                 if network_type == 'primary':
@@ -422,7 +421,6 @@ class TD3ActorCritic:
                     policy_parameter_difference_sum = tf.reduce_sum(fisher_weighted_policy_parameter_difference)
                     lambda_weighted_policy_parameter_difference_sum = tf.multiply(weight_anchoring_lambda,
                                                                                   policy_parameter_difference_sum)
-                    # tf.print('p', lambda_weighted_policy_parameter_difference_sum)
                 else:
                     lambda_weighted_policy_parameter_difference_sum = 0.0
 

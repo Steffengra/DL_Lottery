@@ -18,7 +18,6 @@ from DL_Lottery_imports.dl_internals_with_expl import (
     optimizer_nadam
 )
 
-# TODO: Remember that batch normalization may be required
 # TODO: Look more deeply into the fisher approximation by adam. seems fishy - does it jump around much at every step?
 # TODO: Maybe try decreasing learning rate again
 
@@ -28,14 +27,14 @@ class Config:
             self,
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_critical_allocation_lambda_0'
+        simulation_title: str = 'anchoring_critical_allocation_lambda_5e3_0'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.show_plots: bool = False
         self.toggle_profiling: bool = False  # compute performance profiling
         self.shutdown_on_complete: bool = False
 
         # Simulation Environment Parameters-----------------------------------------
-        self.num_episodes: int = 10
+        self.num_episodes: int = 12
         # simulation_length_seconds: int = 1
         # self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
         self.num_steps_per_episode: int = 10_000
@@ -63,7 +62,7 @@ class Config:
         self.reward_sum_weightings: dict = {
             'sum_capacity_kbit_per_second': + 1.0,
             'sum_normal_timeouts': - 1.0,  # not including priority jobs
-            'sum_priority_timeouts': - 1.0,
+            'sum_priority_timeouts': - 5.0,
         }
 
         # self.toggle_position_logging: bool = False  # high computation cost

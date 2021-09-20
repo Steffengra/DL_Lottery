@@ -37,7 +37,7 @@ class UserEquipment:
     ) -> None:
         rayleigh_fading = rayleigh(scale=self.rayleigh_fading_scale)
 
-        self.channel_fading = rayleigh_fading
+        self.channel_fading = rayleigh_fading**2
 
     def generate_job(
             self

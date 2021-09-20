@@ -53,7 +53,6 @@ class Simulation:
     def insert_priority_job(
             self
     ) -> None:
-        # TODO: This may turn an already delayed job to priority. Is this a problem?
         attempts = 0
         while attempts < 8:
             random_ue_id = self.rng.choice(list(self.users.keys()))
