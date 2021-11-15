@@ -51,10 +51,10 @@ class Runner:
     profiler: object
 
     def __init__(
-            self
+            self,
     ) -> None:
         self.config = Config()
-        self.rng = default_rng()
+        self.rng = self.config.rng
 
         if self.config.toggle_profiling:
             import cProfile
@@ -160,6 +160,7 @@ class Runner:
 
         allocator = TD3ActorCritic(
             name='allocator',
+            rng=self.rng,
             **self.config.td3_args
         )
 
@@ -241,12 +242,17 @@ class Runner:
                 train_policy = False
                 if self.policy_training_criterion(simulation_step=simulation_step):
                     train_policy = True
-                step_allocation_value1_loss = allocator.train(
+                (
+                    step_allocation_value1_loss,
+                    weight_anchoring_lambda_updated,
+                ) = allocator.train(
                     train_policy=train_policy,
                     policy_parameters_anchor=policy_parameters_anchor,
                     policy_parameters_fisher=policy_parameters_fisher,
                     **self.config.training_args,
                 )
+                if self.config.adaptive_anchoring_weight_lambda and weight_anchoring_lambda_updated is not None:
+                    self.config.training_args['weight_anchoring_lambda'] = weight_anchoring_lambda_updated
 
                 # anneal parameters
                 (
@@ -445,6 +451,7 @@ class Runner:
 
         allocator = TD3ActorCritic(
             name='allocator',
+            rng=self.rng,
             **self.config.td3_args
         )
 

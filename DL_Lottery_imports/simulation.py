@@ -32,6 +32,7 @@ class Simulation:
                                                         high=self.config.ue_position_range['high'])},
                     max_job_size_rb=self.config.max_job_size_rb,
                     rayleigh_fading_scale=self.config.ue_rayleigh_fading_scale,
+                    rng=rng,
                 )
 
         self.config = config
@@ -58,7 +59,7 @@ class Simulation:
             random_ue_id = self.rng.choice(list(self.users.keys()))
             ue_jobs = self.users[random_ue_id].jobs
             if ue_jobs:
-                random_job_id = self.rng.choice(range(len(self.users[random_ue_id].jobs)))
+                random_job_id = self.rng.choice(range(len(ue_jobs)))
                 random_job = self.users[random_ue_id].jobs[random_job_id]
                 if random_job.priority == 0:
                     random_job.set_priority()

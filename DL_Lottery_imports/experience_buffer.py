@@ -1,106 +1,89 @@
 
 from numpy import (
     ndarray,
-    array,
+    zeros,
     sum as np_sum,
-    power,
-    append as np_append,
-    delete,
+    divide as np_divide,
+    power as np_power,
     max as np_max,
-    mean as np_mean,
-    var as np_var
+    where as np_where,
+    count_nonzero as np_count_nonzero,
 )
-from numpy.random import (
-    default_rng
-)
+from numpy.random import default_rng
 
 
 class ExperienceBuffer:
-    max_experiences: int
-    buffer: list
-    priorities: ndarray
-    probabilities: ndarray
-
-    alpha: float
-    min_priority: float
-    max_priority: float
-
     def __init__(
             self,
-            num_max_experiences: int,
-            alpha: float
+            rng: default_rng,
+            buffer_size: int,
+            priority_scale_alpha: float,
     ) -> None:
-        self.max_experiences = num_max_experiences  # Max buffer size
+        self.rng: default_rng = rng
+        self.write_pointer: int = 0
 
-        self.buffer = []
-        self.priorities = array([], dtype='float32')
-        self.probabilities = array([], dtype='float32')  # prob_i = priority_i / sum_i(priority_i)
+        self.buffer_size = buffer_size
+        self.buffer: list = [{}] * self.buffer_size
+        self.priorities: ndarray = zeros(self.buffer_size, dtype='float32')
+        self.probabilities: ndarray = zeros(self.buffer_size, dtype='float32')  # prob_i = prio_i / sum_i(prio_i)
 
-        self.alpha = alpha  # Priority adjustment factor, 0..1+
-        self.min_priority = 1e-7  # Minimum priority, arbitrary small value
-        self.max_priority = self.min_priority  # Maximum encountered priority so far, assigned to new exp.
+        self.priority_scale_alpha: float = priority_scale_alpha
+        self.min_priority: float = 1e-20
+        self.max_priority: float = self.min_priority
 
-        self.rng = default_rng()
-
-    def get_len(
-            self
-    ) -> int:
-
-        return len(self.buffer)
-
-    def update_probabilities(
-            self
-    ) -> None:
-        priority_sum = np_sum(self.priorities)
-        self.probabilities = self.priorities / priority_sum
-
-    def adjust_priorities(
-            self,
-            experience_ids: ndarray,
-            new_priorities: ndarray
-    ) -> None:
-        for list_id in range(len(experience_ids)):
-            self.priorities[experience_ids[list_id]] = max(self.min_priority,
-                                                           power(abs(new_priorities[list_id]), self.alpha))
-
-            if abs(new_priorities[list_id]) > self.max_priority:
-                self.max_priority = abs(new_priorities[list_id])
+    def get_len(self) -> int:
+        return np_count_nonzero(self.priorities)
 
     def add_experience(
             self,
-            state,
-            action,
-            reward,
-            next_state
+            experience: dict,
     ) -> None:
-        experience = {'state': state,
-                      'action': action,
-                      'reward': reward,
-                      'next_state': next_state}
-        self.buffer.append(experience)
-        self.priorities = np_append(self.priorities, power(self.max_priority, self.alpha))
+        self.buffer[self.write_pointer] = experience
+        self.priorities[self.write_pointer] = self.max_priority
 
-        if len(self.buffer) > self.max_experiences:
-            self.buffer.pop(0)
-            self.priorities = delete(self.priorities, 0)
+        self.write_pointer += 1
+        self.write_pointer = self.write_pointer % self.buffer_size
 
     def sample(
             self,
             batch_size: int,
-            beta: float
+            importance_sampling_correction_beta: float,  # beta=1 is full correction, beta=0 is no correction
     ) -> tuple[list, ndarray, ndarray]:
-        self.update_probabilities()
+        # Update Probabilities
+        priority_sum = np_sum(self.priorities)
+        self.probabilities = np_divide(self.priorities, priority_sum, dtype='float32')
 
-        # Weighted Sampling
-        experience_ids = self.rng.choice(len(self.buffer), size=batch_size, replace=True, p=self.probabilities)
+        # Sample
+        sample_experience_ids = self.rng.choice(
+            a=self.buffer_size,
+            size=batch_size,
+            replace=True,  # Can an experience id be selected multiple times? Yes/No
+            p=self.probabilities,
+        )
 
-        sample_experiences = [self.buffer[ii] for ii in experience_ids]
+        sample_experiences = [self.buffer[ii] for ii in sample_experience_ids]
+        sample_probabilities = self.probabilities[sample_experience_ids]
 
-        # IS weights correct for bias caused by sampling from a distribution different than the original one
-        # Due to batch scaling we can remove N from the original IS weight formula
-        sample_probabilities = self.probabilities[experience_ids]
-        sample_importance_sampling_weights = power(sample_probabilities, -beta, dtype='float32')
-        # Scale down weights per batch
-        importance_sampling_weights = sample_importance_sampling_weights / np_max(sample_importance_sampling_weights)
+        sample_importance_weights = np_power(sample_probabilities,
+                                             -importance_sampling_correction_beta, dtype='float32')
+        sample_importance_weights = np_divide(sample_importance_weights,
+                                              np_max(sample_importance_weights), dtype='float32')
 
-        return sample_experiences, experience_ids, importance_sampling_weights
+        return (
+            sample_experiences,
+            sample_experience_ids,
+            sample_importance_weights,
+        )
+
+    def adjust_priorities(
+            self,
+            experience_ids: ndarray,
+            new_priorities: ndarray,
+    ) -> None:
+        new_priorities = np_power(new_priorities, self.priority_scale_alpha, dtype='float32')
+        self.priorities[experience_ids] = np_where(new_priorities > self.min_priority,
+                                                   new_priorities, self.min_priority)
+
+        sample_max_priority = np_max(new_priorities)
+        if sample_max_priority > self.max_priority:
+            self.max_priority = sample_max_priority

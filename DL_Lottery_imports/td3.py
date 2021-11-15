@@ -1,11 +1,14 @@
-
+import numpy as np
 import tensorflow as tf
 from numpy import (
     ndarray,
     array,
     ndim,
     newaxis,
-    expand_dims
+    expand_dims,
+)
+from numpy.random import (
+    default_rng,
 )
 
 from DL_Lottery_imports.experience_buffer import (
@@ -26,25 +29,26 @@ from DL_Lottery_imports.dl_internals_with_expl import (
 class TD3ActorCritic:
     batch_size: int
     gamma: float
-    prioritization_factors: list[float]
+    prioritization_factors: dict[str: float]
     networks: dict[str: dict]
 
     def __init__(
             self,
             name: str,
+            rng: default_rng,
             num_actions: int,
             batch_size: int,
             num_hidden_c: list,
             num_hidden_a: list,
             num_max_experiences: int,
-            prioritization_factors: list,
+            prioritization_factors: dict,
             gamma: float,
             optimizer_critic,
             optimizer_critic_args: dict,
             optimizer_actor,
             optimizer_actor_args: dict,
             hidden_layer_args: dict,
-            batch_normalize: bool = False
+            batch_normalize: bool = False,
     ) -> None:
         """
         TD3 proposes a few changes to DDPG with the goal of reducing variance and increasing stability
@@ -60,8 +64,9 @@ class TD3ActorCritic:
         self.prioritization_factors = prioritization_factors  # [alpha, beta] for prioritized experience replay
         self.batch_normalize = batch_normalize
 
-        self.experience_buffer = ExperienceBuffer(num_max_experiences=num_max_experiences,
-                                                  alpha=self.prioritization_factors[0])
+        self.experience_buffer = ExperienceBuffer(buffer_size=num_max_experiences,
+                                                  priority_scale_alpha=self.prioritization_factors['alpha'],
+                                                  rng=rng)
 
         # Initialize Networks-------------------------------------------------------------------------------------------
         self.initialize_networks(name=name,
@@ -284,7 +289,15 @@ class TD3ActorCritic:
         """
         Wrapper to add experience to buffer
         """
-        self.experience_buffer.add_experience(state, action, reward, next_state)
+        self.experience_buffer.add_experience(
+            {
+                'state': state,
+                'action': action,
+                'reward': reward,
+                'next_state': next_state,
+            }
+        )
+        # self.experience_buffer.add_experience(state, action, reward, next_state)
 
     @tf.function
     def update_target_networks(
@@ -296,15 +309,18 @@ class TD3ActorCritic:
         """
         for network_pair in self.networks.values():
             # trainable variables are a list of tf variables
-            variables_primary = network_pair['primary'].trainable_variables
-            variables_target = network_pair['target'].trainable_variables
-            soft_update_parameters = [tf.add(
-                tf.multiply(tau_target_update, variable_primary),
-                tf.multiply((1 - tau_target_update), variable_target))
-                for variable_primary, variable_target
-                in zip(variables_primary, variables_target)]
-            for v_old, v_soft in zip(variables_target, soft_update_parameters):
-                v_old.assign(v_soft)
+            for v_primary, v_target in zip(network_pair['primary'].trainable_variables,
+                                           network_pair['target'].trainable_variables):
+                v_target.assign(tau_target_update * v_primary + (1 - tau_target_update) * v_target)
+            # variables_primary = network_pair['primary'].trainable_variables
+            # variables_target = network_pair['target'].trainable_variables
+            # soft_update_parameters = [tf.add(
+            #     tf.multiply(tau_target_update, variable_primary),
+            #     tf.multiply((1 - tau_target_update), variable_target))
+            #     for variable_primary, variable_target
+            #     in zip(variables_primary, variables_target)]
+            # for v_old, v_soft in zip(variables_target, soft_update_parameters):
+            #     v_old.assign(v_soft)
 
     @tf.function
     def train_graph(
@@ -322,12 +338,13 @@ class TD3ActorCritic:
             weight_anchoring_lambda: None or float = None,
             policy_parameters_anchor: None or list = None,
             policy_parameters_fisher: None or list = None,
-    ) -> tuple[tf.Tensor, tf.Tensor]:
+    ) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
         def call_network(network, inputs):
             if self.batch_normalize:
                 return network.call_and_normalize_on_batch(inputs)
             else:
                 return network.call(inputs)
+
         """
         Wraps as much as possible of the training process into a graph for performance
         """
@@ -385,6 +402,7 @@ class TD3ActorCritic:
         # --------------------------------------------------------------------------------------------------------------
 
         # Actor Network-------------------------------------------------------------------------------------------------
+        weight_anchoring_lambda_updated = weight_anchoring_lambda
         if train_policy:
             # Gradient step policy--------------------------------------------------------------
             input_vector = states
@@ -392,13 +410,10 @@ class TD3ActorCritic:
                 # loss value network
                 actor_actions = call_network(self.networks['policy']['primary'], input_vector)
                 value_network_input = tf.concat([input_vector, actor_actions], axis=1)
-                value_network_score = tf.reduce_mean(
-                    call_network(self.networks['value1']['target'], value_network_input))
                 # TODO: Original Paper, DDPG Paper and other implementations train on primary network. Why?
-                # value_network_score = -tf.reduce_mean(
-                #     self.networks['value1']['primary'].call(value_network_input, batch_normalize=True))
-
-                # tf.print(value_network_score)
+                #  Because this way the value net is always one gradient step behind
+                value_network_score = tf.reduce_mean(
+                    call_network(self.networks['value1']['primary'], value_network_input))
 
                 # loss anchor
                 if policy_parameters_anchor:
@@ -418,16 +433,34 @@ class TD3ActorCritic:
                                                                              policy_parameters_anchor)
                     fisher_weighted_policy_parameter_difference = tf.multiply(policy_parameters_fisher,
                                                                               policy_parameter_difference)
-                    policy_parameter_difference_sum = tf.reduce_sum(fisher_weighted_policy_parameter_difference)
-                    lambda_weighted_policy_parameter_difference_sum = tf.multiply(weight_anchoring_lambda,
-                                                                                  policy_parameter_difference_sum)
+                    policy_parameter_difference_mean = tf.reduce_mean(fisher_weighted_policy_parameter_difference)
+                    lambda_weighted_policy_parameter_difference_mean = tf.multiply(weight_anchoring_lambda,
+                                                                                   policy_parameter_difference_mean)
                 else:
-                    lambda_weighted_policy_parameter_difference_sum = 0.0
+                    lambda_weighted_policy_parameter_difference_mean = 0.0
 
                 loss = (
-                    - value_network_score
-                    + lambda_weighted_policy_parameter_difference_sum
+                        - value_network_score
+                        + lambda_weighted_policy_parameter_difference_mean
                 )
+
+            # TODO: This should probably be a parameter or two (enable, learning rate) in the config
+            decade_scaler_weight_update = 1
+            # if not lambda_weighted_policy_parameter_difference_mean == 0.0:
+                # VARIANT 1: PLAIN
+                # weight_anchoring_lambda_updated = weight_anchoring_lambda * decade_scaler_weight_update * (
+                #         value_network_score / lambda_weighted_policy_parameter_difference_mean)
+                # VARIANT 2: MOMENTUM
+                # weight_anchoring_momentum_parameter = 0.9
+                # weight_anchoring_lambda_updated = (
+                #         + weight_anchoring_momentum_parameter * weight_anchoring_lambda
+                #         + (1 - weight_anchoring_momentum_parameter) * decade_scaler_weight_update * (
+                #                 value_network_score / policy_parameter_difference_mean)
+                # )
+            # tf.print('v', value_network_score)
+            # tf.print('l', lambda_weighted_policy_parameter_difference_mean)
+            # tf.print('w', weight_anchoring_lambda)
+            # tf.print('u', weight_anchoring_lambda_updated)
 
             gradients = tape.gradient(target=loss,  # d_loss / d_parameters
                                       sources=self.networks['policy']['primary'].trainable_variables)
@@ -437,8 +470,7 @@ class TD3ActorCritic:
         # --------------------------------------------------------------------------------------------------------------
 
         self.update_target_networks(tau_target_update=tau_target_update)
-
-        return q1_loss, q1_td_error
+        return q1_loss, q1_td_error, weight_anchoring_lambda_updated
 
     def train(
             self,
@@ -450,10 +482,10 @@ class TD3ActorCritic:
             weight_anchoring_lambda: None or float = None,
             policy_parameters_anchor: None or list = None,
             policy_parameters_fisher: None or list = None,
-    ) -> float or None:
+    ) -> tuple[float or None, float or None]:
 
         if self.experience_buffer.get_len() < self.batch_size:
-            return None
+            return None, None
 
         # Sample from experience buffer-------------------------------------------------------------
         (
@@ -462,7 +494,7 @@ class TD3ActorCritic:
             sample_importance_weights
         ) = self.experience_buffer.sample(
             batch_size=self.batch_size,
-            beta=self.prioritization_factors[1]
+            importance_sampling_correction_beta=self.prioritization_factors['beta']
         )
         states = tf.constant([experience['state'] for experience in sample_experiences], dtype=tf.float32)
         actions = tf.constant([experience['action'] for experience in sample_experiences], dtype=tf.float32)
@@ -477,7 +509,8 @@ class TD3ActorCritic:
 
         (
             q1_loss,
-            q1_td_error
+            q1_td_error,
+            weight_anchoring_lambda_updated,
         ) = self.train_graph(
             training_noise_std=training_noise_std,
             training_noise_clip=training_noise_clip,
@@ -495,4 +528,7 @@ class TD3ActorCritic:
 
         self.experience_buffer.adjust_priorities(experience_ids=experience_ids, new_priorities=q1_td_error.numpy())
 
-        return q1_loss.numpy()
+        return (
+            q1_loss.numpy(),
+            weight_anchoring_lambda_updated,
+        )

@@ -23,9 +23,12 @@ def main():
         )
 
     def train_on_fifty_percent_critical():
+        num_episodes_old = runner.config.num_episodes
+        runner.config.update_num_episodes(new_num_episodes=2*runner.config.num_episodes)
         runner.train_fifty_percent_critical(
             name='base',
         )
+        runner.config.update_num_episodes(new_num_episodes=num_episodes_old)
 
     def train_on_normal():
         num_episodes_old = runner.config.num_episodes
@@ -37,7 +40,7 @@ def main():
 
     def train_on_normal_anchored():
         sum_priority_timeout_old = runner.config.reward_sum_weightings['sum_priority_timeouts']
-        runner.config.reward_sum_weightings['sum_priority_timeouts'] = - 0.0
+        runner.config.reward_sum_weightings['sum_priority_timeouts'] = -0.0
         runner.train_normal(
             name='anchored',
             anchoring_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
@@ -46,7 +49,7 @@ def main():
 
     def train_on_normal_anchored_pretrained():
         sum_priority_timeout_old = runner.config.reward_sum_weightings['sum_priority_timeouts']
-        runner.config.reward_sum_weightings['sum_priority_timeouts'] = - 0.0
+        runner.config.reward_sum_weightings['sum_priority_timeouts'] = -0.0
         runner.train_normal(
             name='anchored_pretrained',
             value_network_path=join(config.model_path, 'critic_allocation_training_critical_events_base'),
@@ -110,21 +113,21 @@ def main():
     config = Config()
     runner = Runner()
 
-    # train_on_normal()
-    # train_on_critical()
+    train_on_normal()
+    train_on_critical()
     train_on_fifty_percent_critical()
-    # train_on_normal_anchored()
-    # train_on_normal_anchored_pretrained()
+    train_on_normal_anchored()
+    train_on_normal_anchored_pretrained()
 
     runner.config.update_num_episodes(new_num_episodes=5)
     runner.config.update_num_steps_per_episode(new_steps_per_episode=100_000)
 
-    # test_normal()
-    # test_critical()
+    test_normal()
+    test_critical()
     test_fifty_percent_critical()
-    # test_normal_anchored()
-    # test_normal_anchored_pretrained()
-    # test_random_scheduler()
+    test_normal_anchored()
+    test_normal_anchored_pretrained()
+    test_random_scheduler()
 
     if config.shutdown_on_complete:
         system('shutdown /h')

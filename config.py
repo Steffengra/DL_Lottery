@@ -6,6 +6,10 @@ from numpy import (
     floor,
     finfo,
 )
+import tensorflow as tf
+from numpy.random import (
+    default_rng,
+)
 from os import (
     makedirs,
 )
@@ -15,11 +19,12 @@ from os.path import (
 )
 from DL_Lottery_imports.dl_internals_with_expl import (
     optimizer_adam,
-    optimizer_nadam
+    optimizer_nadam,
 )
 
 # TODO: Look more deeply into the fisher approximation by adam. seems fishy - does it jump around much at every step?
-# TODO: Maybe try decreasing learning rate again
+# TODO: Maybe try cooling learning rate again
+# TODO: SAC has an adaptive method for learning weight parameters
 
 
 class Config:
@@ -27,14 +32,16 @@ class Config:
             self,
     ) -> None:
         # Tweakable-----------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_critical_allocation_lambda_5e3_0'
+        simulation_title: str = 'anchoring_1e4_0'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.show_plots: bool = False
         self.toggle_profiling: bool = False  # compute performance profiling
         self.shutdown_on_complete: bool = False
 
+        rng_seed: int or None = None  # doesn't work at this time
+
         # Simulation Environment Parameters-----------------------------------------
-        self.num_episodes: int = 12
+        self.num_episodes: int = 15
         # simulation_length_seconds: int = 1
         # self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
         self.num_steps_per_episode: int = 10_000
@@ -69,25 +76,25 @@ class Config:
 
         # Neural Network Parameters-------------------------------------------------
         # Architecture-------
-        self.hidden_layers_value_net: list = [512, 512, 512, 512, 512]  # + output layer width 1
-        self.hidden_layers_policy_net: list = [512, 512, 512, 512, 512]  # + output layer width num_actions
+        self.hidden_layers_value_net: list = [64, 64]  # + output layer width 1
+        self.hidden_layers_policy_net: list = [64, 64]  # + output layer width num_actions
         self.hidden_layer_args: dict = {
-            'activation_hidden': 'penalized_tanh',  # [>'relu', 'elu', 'penalized_tanh']
+            'activation_hidden': 'tanh',  # [>'relu', 'elu', 'tanh' 'penalized_tanh']
             'kernel_initializer': 'glorot_uniform'  # options: tf.keras.initializers, default: >'glorot_uniform'
         }
         self.num_actions_policy: int = self.num_users
 
         self.optimizer_critic = optimizer_adam  # 'adam', 'nadam', 'amsgrad'
         self.optimizer_critic_args: dict = {
-            'learning_rate': 1e-3,
+            'learning_rate': 1e-2,
             'epsilon': 1e-8,
-            'amsgrad': True
+            'amsgrad': True,
         }
         self.optimizer_actor = optimizer_adam
         self.optimizer_actor_args: dict = {
             'learning_rate': 1e-3,
             'epsilon': 1e-8,
-            'amsgrad': True
+            'amsgrad': True,
         }
 
         # Training-----------
@@ -101,11 +108,14 @@ class Config:
         self.tau_target_update: float = 1e-1
         self.batch_size: int = 256
         self.batch_normalize: bool = False  # Normalize to 0 mean, unit variance based on mini-batch statistics
-        self.anchoring_weight_lambda: float = 0  # Multiplier weight to the anchoring penalty in the loss function
+
+        self.adaptive_anchoring_weight_lambda: bool = False
+        self.anchoring_weight_lambda: float = 1e4  # Multiplier weight to the anchoring penalty in the loss function
 
         # Experience Buffer--
         self.experience_buffer_max_size: int = 20_000
-        self.prioritization_factors: list = [0, 1]  # [alpha, beta], alpha=sample weight scaling, beta=IS correction %
+        self.prioritization_factors: dict = {'alpha': 0.0,  # priority = priority ** alpha, \alpha \in [0, 1]
+                                             'beta': 1.0}  # IS correction, \beta \in [0%, 100%]
 
         # Exploration--------
         self.exploration_noise_momentum_initial: float = 1.0
@@ -226,6 +236,9 @@ class Config:
         makedirs(self.log_path, exist_ok=True)
 
         # Internal------------------------------------------------------------------
+        self.rng = default_rng(seed=rng_seed)
+        tf.random.set_seed(seed=rng_seed)
+
         # self.num_steps_per_episode: int = int(
         #     simulation_length_seconds / self.duration_subframe_s * self.symbols_per_subframe
         # )

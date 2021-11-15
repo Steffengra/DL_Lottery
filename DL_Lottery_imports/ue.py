@@ -1,8 +1,6 @@
 
 from numpy.random import (
-    # randn,
-    rayleigh,
-    randint,
+    default_rng,
 )
 
 from DL_Lottery_imports.job import Job
@@ -14,6 +12,7 @@ class UserEquipment:
     channel_fading: float
     max_job_size_rb: int
     jobs: list
+    rng: default_rng
 
     def __init__(
             self,
@@ -21,7 +20,10 @@ class UserEquipment:
             pos_initial: dict,
             max_job_size_rb: int,
             rayleigh_fading_scale: float,
+            rng: default_rng,
     ) -> None:
+        self.rng = rng
+
         self.user_id = user_id
         self.position = pos_initial
         self.rayleigh_fading_scale = rayleigh_fading_scale
@@ -35,13 +37,13 @@ class UserEquipment:
     def update_channel_fading(
             self
     ) -> None:
-        rayleigh_fading = rayleigh(scale=self.rayleigh_fading_scale)
+        rayleigh_fading = self.rng.rayleigh(scale=self.rayleigh_fading_scale)
 
         self.channel_fading = rayleigh_fading**2
 
     def generate_job(
             self
     ) -> None:
-        size = randint(1, self.max_job_size_rb + 1)
+        size = self.rng.integers(low=1, high=self.max_job_size_rb + 1)
         job = Job(size_rb=size)
         self.jobs.append(job)
