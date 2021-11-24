@@ -1,4 +1,5 @@
 
+import tensorflow as tf
 from numpy import (
     ndarray,
     array,
@@ -6,17 +7,13 @@ from numpy import (
     floor,
     finfo,
 )
-import tensorflow as tf
 from numpy.random import (
     default_rng,
 )
-from os import (
-    makedirs,
+from pathlib import (
+    Path,
 )
-from os.path import (
-    join,
-    dirname
-)
+
 from DL_Lottery_imports.dl_internals_with_expl import (
     optimizer_adam,
     optimizer_nadam,
@@ -31,8 +28,8 @@ class Config:
     def __init__(
             self,
     ) -> None:
-        # Tweakable-----------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_1e4_0'
+        # GENERAL-------------------------------------------------------------------------------------------------------
+        simulation_title: str = 'anchoring_1e4_2'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.show_plots: bool = False
         self.toggle_profiling: bool = False  # compute performance profiling
@@ -40,13 +37,13 @@ class Config:
 
         rng_seed: int or None = None  # doesn't work at this time
 
-        # Simulation Environment Parameters-----------------------------------------
+        # ENVIRONMENT PARAMETERS----------------------------------------------------------------------------------------
         self.num_episodes: int = 15
         # simulation_length_seconds: int = 1
         # self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
         self.num_steps_per_episode: int = 10_000
 
-        # load related
+        # LOAD
         self.available_rb_ofdm: int = 10
         self.bandwidth_per_rb_khz: int = 12 * 15  # 5g num0 = 12 subcarriers * 15 khz. Converts rb to bw for capacity
 
@@ -54,7 +51,7 @@ class Config:
         self.job_creation_probability: float = 0.5
         self.max_job_size_rb: int = 7
 
-        # reward related
+        # REWARD
         self.ue_snr_db: float = 10  # for capacity
         self.ue_rayleigh_fading_scale: float = .3  # for capacity
         self.ue_position_range: dict = {'low': -100, 'high': 100}  # for capacity
@@ -74,8 +71,8 @@ class Config:
 
         # self.toggle_position_logging: bool = False  # high computation cost
 
-        # Neural Network Parameters-------------------------------------------------
-        # Architecture-------
+        # NETWORK PARAMETERS--------------------------------------------------------------------------------------------
+        # ARCHITECTURE
         self.hidden_layers_value_net: list = [64, 64]  # + output layer width 1
         self.hidden_layers_policy_net: list = [64, 64]  # + output layer width num_actions
         self.hidden_layer_args: dict = {
@@ -97,7 +94,7 @@ class Config:
             'amsgrad': True,
         }
 
-        # Training-----------
+        # TRAINING
         self.future_reward_discount_gamma_allocation: float = 0.00
         self.train_policy_every_k: int = 1  # td3 waits a number of value net updates before updating policy net
         self.train_policy_after_j_percent: float = 0.0  # start training policy after j% of simulation steps
@@ -112,12 +109,12 @@ class Config:
         self.adaptive_anchoring_weight_lambda: bool = False
         self.anchoring_weight_lambda: float = 1e4  # Multiplier weight to the anchoring penalty in the loss function
 
-        # Experience Buffer--
+        # EXP BUFFER
         self.experience_buffer_max_size: int = 20_000
         self.prioritization_factors: dict = {'alpha': 0.0,  # priority = priority ** alpha, \alpha \in [0, 1]
                                              'beta': 1.0}  # IS correction, \beta \in [0%, 100%]
 
-        # Exploration--------
+        # EXPLORATION
         self.exploration_noise_momentum_initial: float = 1.0
         self.exploration_noise_decay_start_percent: float = 0.0  # After which % of training to start decay
         self.exploration_noise_decay_threshold_percent: float = 0.5
@@ -128,20 +125,20 @@ class Config:
         #     'randomness_intensity': 1.0  # in fractional: how much perturbation should be applied when exploring
         # }
 
-        # Pruning------------
+        # PRUNING
         self.prune_network: bool = False
         self.pruning_args: dict = {
             'magnitude_percentile': 10,  # prune parameters |w_final|, remove below percentile
             'magnitude_increase_percentile': 0,  # prune parameters |w_final| - |w_init|, remove below percentile
         }
 
-        # Definitions---------------------------------------------------------------------------------------------------
-        # Simulation Environment Parameters-----------------------------------------
+        # DEFINITIONS---------------------------------------------------------------------------------------------------
         # self.mobility_types: dict = {
         #     'High': {'range_initial': [-25, 25], 'step_size_max': .8},
         #     'Low': {'range_initial': [-3, 3], 'step_size_max': .001},
         #     'Static': {'range_initial': [-3, 3], 'step_size_max': 0}
         # }
+
         self.tiny_numerical_value = finfo('float32').tiny
 
         self.duration_frame_s: float = 0.01
@@ -228,17 +225,38 @@ class Config:
                 27: {'spectral_efficiency': 4.2129, 'mod_order': 6, 'coding_rate': 719 / 1024},
                 28: {'spectral_efficiency': 4.5234, 'mod_order': 6, 'coding_rate': 772 / 1024}}}
 
-        # Simulation Parameters-----------------------------------------------------
-        self.model_path: str = join(dirname(__file__), 'SavedModels', simulation_title)
-        self.log_path: str = join(dirname(__file__), 'logs', simulation_title)
-        self.performance_profile_path: str = join(dirname(__file__), 'performance_profiles')
-        makedirs(self.model_path, exist_ok=True)
-        makedirs(self.log_path, exist_ok=True)
+        # PATHS
+        self.model_path: Path = Path(Path.cwd(), 'SavedModels', simulation_title)
+        self.log_path: Path = Path(Path.cwd(), 'logs', simulation_title)
+        self.performance_profile_path: Path = Path(Path.cwd(), 'performance_profiles')
 
-        # Internal------------------------------------------------------------------
+        # PLOTTING
+        # Branding Palette
+        self.color0: str = '#000000'  # black
+        self.color1: str = '#21467a'  # blue
+        self.color2: str = '#c4263a'  # red
+        self.color3: str = '#008700'  # green
+        self.color4: str = '#caa023'  # gold
+
+        # Colorblind Palette
+        self.ccolor0: str = '#000000'  # use for lines, black
+        self.ccolor1: str = '#d01b88'  # use for lines, pink
+        self.ccolor2: str = '#254796'  # use for scatter, blue
+        self.ccolor3: str = '#307b3b'  # use for scatter, green
+        self.ccolor4: str = '#caa023'  # use for scatter, gold
+
+        # POST-INIT ## DON'T TOUCH ##-----------------------------------------------------------------------------------
+
+        # RNG
         self.rng = default_rng(seed=rng_seed)
         tf.random.set_seed(seed=rng_seed)
 
+        # MAKE DIRS
+        self.model_path.mkdir(parents=True, exist_ok=True)
+        self.log_path.mkdir(parents=True, exist_ok=True)
+        self.performance_profile_path.mkdir(parents=True, exist_ok=True)
+
+        # CALCULATED VALUES
         # self.num_steps_per_episode: int = int(
         #     simulation_length_seconds / self.duration_subframe_s * self.symbols_per_subframe
         # )
@@ -247,7 +265,6 @@ class Config:
         self.pos_base_station: ndarray = array([0, 0])
         self.ue_snr_linear = 10 ** (self.ue_snr_db / 10)
 
-        # Exploration--------------
         self.exploration_noise_step_start_decay: int = ceil(
             self.exploration_noise_decay_start_percent * self.num_episodes * self.num_steps_per_episode
         )
@@ -290,21 +307,6 @@ class Config:
             'tau_target_update': self.tau_target_update,
             'weight_anchoring_lambda': self.anchoring_weight_lambda,
         }
-
-        # Plotting------------------------------------------------------------------
-        # Branding Palette
-        self.color0: str = '#000000'  # black
-        self.color1: str = '#21467a'  # blue
-        self.color2: str = '#c4263a'  # red
-        self.color3: str = '#008700'  # green
-        self.color4: str = '#caa023'  # gold
-
-        # Colorblind Palette
-        self.ccolor0: str = '#000000'  # use for lines, black
-        self.ccolor1: str = '#d01b88'  # use for lines, pink
-        self.ccolor2: str = '#254796'  # use for scatter, blue
-        self.ccolor3: str = '#307b3b'  # use for scatter, green
-        self.ccolor4: str = '#caa023'  # use for scatter, gold
 
     def update_num_steps_per_episode(
             self,

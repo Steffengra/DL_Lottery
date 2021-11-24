@@ -1,4 +1,4 @@
-import numpy as np
+
 import tensorflow as tf
 from numpy import (
     ndarray,
@@ -198,8 +198,8 @@ class TD3ActorCritic:
                 or
                 num_layers_policy > len(layers_policy[0])
         ):
-            print('Cannot freeze more layers than present: {} value, {} policy'.format(
-                len(layers_value[0]), len(layers_policy[0])))
+            print(f'Cannot freeze more layers than present: '
+                  f'{len(layers_value[0])} value, {len(layers_policy[0])} policy')
             exit()
 
         for network_layers in layers_policy:

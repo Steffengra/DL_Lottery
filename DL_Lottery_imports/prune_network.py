@@ -52,6 +52,6 @@ def prune_network(
                 parameters_total += 1
                 # if there is just a single node we would not want to prune it
 
-    print('{:.2%} nodes pruned'.format(parameters_changed / parameters_total))
+    print(f'{parameters_changed / parameters_total:.2%} nodes pruned')
 
     return parameters_new

@@ -2,11 +2,11 @@
 from matplotlib.pyplot import (
     show as plt_show,
 )
-from os.path import (
-    join,
-)
 from os import (
     system,
+)
+from pathlib import (
+    Path,
 )
 
 from config import Config
@@ -31,39 +31,39 @@ def main():
     runner.test(
         allocator='pretrained',
         probability_critical_events=1.0,
-        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events_base'),
-        policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
+        policy_network_path=Path(config.model_path, 'actor_allocation_training_critical_events_base'),
+        policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
         name='pretrained',
     )
 
     # train on random without anchoring -> should ruin performance
     runner.train_on_random_data(
-        value_network_path=join(config.model_path, 'critic_allocation_training_critical_events_base'),
-        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events_base'),
+        value_network_path=Path(config.model_path, 'critic_allocation_training_critical_events_base'),
+        policy_network_path=Path(config.model_path, 'actor_allocation_training_critical_events_base'),
         name='_no_anchoring'
     )
     # test if performance is ruined
     runner.test(
         allocator='pretrained',
         probability_critical_events=1.0,
-        policy_network_path=join(config.model_path, 'actor_allocation_training_random_data_no_anchoring'),
-        policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
+        policy_network_path=Path(config.model_path, 'actor_allocation_training_random_data_no_anchoring'),
+        policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events.gzip'),
         name='trained_random_no_anchoring',
     )
 
     # train on random with anchoring -> performance should be preserved
     runner.train_on_random_data(
-        value_network_path=join(config.model_path, 'critic_allocation_training_critical_events'),
-        policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events'),
-        anchoring_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
+        value_network_path=Path(config.model_path, 'critic_allocation_training_critical_events'),
+        policy_network_path=Path(config.model_path, 'actor_allocation_training_critical_events'),
+        anchoring_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events.gzip'),
         name='_anchored'
     )
     # test if performance is preserved
     runner.test(
         allocator='pretrained',
         probability_critical_events=1.0,
-        policy_network_path=join(config.model_path, 'actor_allocation_training_random_data_anchoring'),
-        policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events.gzip'),
+        policy_network_path=Path(config.model_path, 'actor_allocation_training_random_data_anchoring'),
+        policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events.gzip'),
         name='trained_random_anchored'
     )
 

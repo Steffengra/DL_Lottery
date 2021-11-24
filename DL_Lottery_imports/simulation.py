@@ -201,7 +201,7 @@ class Simulation:
         # unallocated_rb = self.res_grid.total_resource_blocks - sum(allocated_rb_per_ue.values())
         # if unallocated_rb > 0:
         #     if self.config.verbosity == 1:
-        #         print('{} rb left unallocated'.format(unallocated_rb))
+        #         print(f'{unallocated_rb} rb left unallocated')
 
         return allocated_rb_per_ue
 
@@ -244,9 +244,9 @@ class Simulation:
                 ue.jobs.remove(job)
 
         # if self.config.verbosity == 1:
-            # print('r1 {}'.format(sum_capacity_kbit_per_second))
-            # print('r2 {}'.format(sum_timeouts))
-            # print('r3 {}'.format(sum_priority_timeouts))
+            # print(f'r1 {sum_capacity_kbit_per_second}')
+            # print(f'r2 {sum_timeouts}')
+            # print(f'r3 {sum_priority_timeouts}')
 
         # calculate reward sum
         reward = (

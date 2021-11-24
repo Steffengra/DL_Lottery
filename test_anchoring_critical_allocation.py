@@ -5,8 +5,8 @@ from matplotlib.pyplot import (
 from os import (
     system,
 )
-from os.path import (
-    join,
+from pathlib import (
+    Path,
 )
 
 from config import Config
@@ -43,7 +43,7 @@ def main():
         runner.config.reward_sum_weightings['sum_priority_timeouts'] = -0.0
         runner.train_normal(
             name='anchored',
-            anchoring_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
+            anchoring_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
         )
         runner.config.reward_sum_weightings['sum_priority_timeouts'] = sum_priority_timeout_old
 
@@ -52,9 +52,9 @@ def main():
         runner.config.reward_sum_weightings['sum_priority_timeouts'] = -0.0
         runner.train_normal(
             name='anchored_pretrained',
-            value_network_path=join(config.model_path, 'critic_allocation_training_critical_events_base'),
-            policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events_base'),
-            anchoring_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
+            value_network_path=Path(config.model_path, 'critic_allocation_training_critical_events_base'),
+            policy_network_path=Path(config.model_path, 'actor_allocation_training_critical_events_base'),
+            anchoring_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
         )
         runner.config.reward_sum_weightings['sum_priority_timeouts'] = sum_priority_timeout_old
 
@@ -62,8 +62,8 @@ def main():
         runner.test(
             allocator='pretrained',
             probability_critical_events=config.normal_priority_job_probability,
-            policy_network_path=join(config.model_path, 'actor_allocation_training_critical_events_base'),
-            policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
+            policy_network_path=Path(config.model_path, 'actor_allocation_training_critical_events_base'),
+            policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_critical_events_base.gzip'),
             name='critical'
         )
 
@@ -71,8 +71,8 @@ def main():
         runner.test(
             allocator='pretrained',
             probability_critical_events=config.normal_priority_job_probability,
-            policy_network_path=join(config.model_path, 'actor_allocation_training_fifty_percent_critical_events_base'),
-            policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_fifty_percent_critical_events_base.gzip'),
+            policy_network_path=Path(config.model_path, 'actor_allocation_training_fifty_percent_critical_events_base'),
+            policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_fifty_percent_critical_events_base.gzip'),
             name='fifty_percent_critical'
         )
 
@@ -80,8 +80,8 @@ def main():
         runner.test(
             allocator='pretrained',
             probability_critical_events=config.normal_priority_job_probability,
-            policy_network_path=join(config.model_path, 'actor_allocation_training_normal_base'),
-            policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_normal_base.gzip'),
+            policy_network_path=Path(config.model_path, 'actor_allocation_training_normal_base'),
+            policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_normal_base.gzip'),
             name='baseline'
         )
 
@@ -89,8 +89,8 @@ def main():
         runner.test(
             allocator='pretrained',
             probability_critical_events=config.normal_priority_job_probability,
-            policy_network_path=join(config.model_path, 'actor_allocation_training_normal_anchored'),
-            policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_normal_anchored.gzip'),
+            policy_network_path=Path(config.model_path, 'actor_allocation_training_normal_anchored'),
+            policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_normal_anchored.gzip'),
             name='anchored'
         )
 
@@ -98,8 +98,8 @@ def main():
         runner.test(
             allocator='pretrained',
             probability_critical_events=config.normal_priority_job_probability,
-            policy_network_path=join(config.model_path, 'actor_allocation_training_normal_anchored_pretrained'),
-            policy_pruning_parameters_path=join(config.model_path, 'policy_parameters_training_normal_anchored_pretrained.gzip'),
+            policy_network_path=Path(config.model_path, 'actor_allocation_training_normal_anchored_pretrained'),
+            policy_pruning_parameters_path=Path(config.model_path, 'policy_parameters_training_normal_anchored_pretrained.gzip'),
             name='anchored_pretrained'
         )
 
@@ -113,21 +113,21 @@ def main():
     config = Config()
     runner = Runner()
 
-    train_on_normal()
+    # train_on_normal()
     train_on_critical()
-    train_on_fifty_percent_critical()
+    # train_on_fifty_percent_critical()
     train_on_normal_anchored()
     train_on_normal_anchored_pretrained()
 
     runner.config.update_num_episodes(new_num_episodes=5)
     runner.config.update_num_steps_per_episode(new_steps_per_episode=100_000)
 
-    test_normal()
+    # test_normal()
     test_critical()
-    test_fifty_percent_critical()
+    # test_fifty_percent_critical()
     test_normal_anchored()
     test_normal_anchored_pretrained()
-    test_random_scheduler()
+    # test_random_scheduler()
 
     if config.shutdown_on_complete:
         system('shutdown /h')

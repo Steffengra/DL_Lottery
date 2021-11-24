@@ -14,9 +14,8 @@ from numpy.random import (
 from tensorflow.keras.models import (
     load_model,
 )
-from os.path import (
-    dirname,
-    join,
+from pathlib import (
+    Path,
 )
 from shutil import (
     copy2,
@@ -112,8 +111,8 @@ class Runner:
             timedelta = datetime.now() - real_time_start
             finish_time = real_time_start + timedelta / progress
 
-            print('\rSimulation completed: {:.2%}, est. finish {:02d}:{:02d}:{:02d}'.format(
-                progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
+            print(f'\rSimulation completed: {progress:.2%}, '
+                  f'est. finish {finish_time.hour:02d}:{finish_time.minute:02d}:{finish_time.second:02d}', end='')
 
         def save_networks() -> None:
             state = sim.gather_state()
@@ -121,13 +120,13 @@ class Runner:
 
             allocator.networks['policy']['target'](state[newaxis])
             allocator.networks['policy']['target'].save(
-                join(self.config.model_path, 'actor_allocation_' + training_name))
+                Path(self.config.model_path, f'actor_allocation_{training_name}'))
 
             allocator.networks['value1']['target'](concatenate([state, action])[newaxis])
             allocator.networks['value1']['target'].save(
-                join(self.config.model_path, 'critic_allocation_' + training_name))
+                Path(self.config.model_path, 'critic_allocation_' + training_name))
 
-            copy2(join(dirname(__file__), 'config.py'), self.config.model_path)
+            copy2(Path(Path.cwd(), 'config.py'), self.config.model_path)
 
         def anneal_parameters() -> tuple:
             if simulation_step > self.config.exploration_noise_step_start_decay:
@@ -156,7 +155,7 @@ class Runner:
             rng=self.rng,
         )
         if self.config.verbosity == 1:
-            print('Expected load: {:.2f}'.format(sim.get_expected_load()))
+            print(f'Expected load: {sim.get_expected_load():.2f}')
 
         allocator = TD3ActorCritic(
             name='allocator',
@@ -286,17 +285,15 @@ class Runner:
 
             # print episode results
             if self.config.verbosity == 1:
+                progress = sum(episode_metrics["rewards"]) / self.config.num_steps_per_episode
+                relative_priority_timeouts = (
+                        sum(episode_metrics["priority_timeouts"])
+                        / self.config.num_steps_per_episode
+                        / (probability_critical_events + self.config.tiny_numerical_value))
                 print('\n', end='')
-                print('episode per step reward: {:.2f}'.format(
-                    sum(episode_metrics['rewards']) / self.config.num_steps_per_episode)
-                )
-                print('episode mean value loss: {:.2f}'.format(
-                    mean(episode_metrics['value_losses']))
-                )
-                print('episode per occurrence priority timeouts: {:.2f}'.format(
-                    sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / (
-                        probability_critical_events + self.config.tiny_numerical_value)
-                ))
+                print(f'episode per step reward: {progress:.2f}')
+                print(f'episode mean value loss: {mean(episode_metrics["value_losses"]):.2f}')
+                print(f'episode per occurrence priority timeouts: {relative_priority_timeouts:.2f}')
 
             # reset simulation for next episode
             sim.reset()
@@ -309,9 +306,9 @@ class Runner:
         save_networks()
 
         # save logged results
-        with gzip_open(join(self.config.log_path, training_name + '_per_episode_metrics.gzip'), 'wb') as file:
+        with gzip_open(Path(self.config.log_path, f'{training_name}_per_episode_metrics.gzip'), 'wb') as file:
             pickle_dump(per_episode_metrics, file=file)
-        with gzip_open(join(self.config.model_path, 'policy_parameters_' + training_name + '.gzip'), 'wb') as file:
+        with gzip_open(Path(self.config.model_path, f'policy_parameters_{training_name}.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
 
         # end compute performance profiling
@@ -319,7 +316,7 @@ class Runner:
             self.profiler.disable()
             if self.config.verbosity == 1:
                 self.profiler.print_stats(sort='cumulative')
-            self.profiler.dump_stats(join(self.config.performance_profile_path, training_name + '.profile'))
+            self.profiler.dump_stats(Path(self.config.performance_profile_path, f'{training_name}.profile'))
 
         # plots
         plot_scatter_plot(per_episode_metrics['reward_per_step'],
@@ -338,7 +335,7 @@ class Runner:
     ) -> None:
         """Wrapper for 100% critical event chance"""
         self.train(
-            training_name='training_critical_events_' + name,
+            training_name=f'training_critical_events_{name}',
             probability_critical_events=1,
             value_network_path=value_network_path,
             policy_network_path=policy_network_path,
@@ -354,7 +351,7 @@ class Runner:
     ) -> None:
         """Wrapper for 0% critical event chance"""
         self.train(
-            training_name='training_no_critical_events_' + name,
+            training_name=f'training_no_critical_events_{name}',
             probability_critical_events=0,
             value_network_path=value_network_path,
             policy_network_path=policy_network_path,
@@ -370,7 +367,7 @@ class Runner:
     ) -> None:
         """Wrapper for normal amount of critical events"""
         self.train(
-            training_name='training_normal_' + name,
+            training_name=f'training_normal_{name}',
             probability_critical_events=self.config.normal_priority_job_probability,
             value_network_path=value_network_path,
             policy_network_path=policy_network_path,
@@ -386,7 +383,7 @@ class Runner:
     ):
         """Wrapper for 50% critical rate"""
         self.train(
-            training_name='training_fifty_percent_critical_events_' + name,
+            training_name=f'training_fifty_percent_critical_events_{name}',
             probability_critical_events=0.5,
             value_network_path=value_network_path,
             policy_network_path=policy_network_path,
@@ -405,8 +402,8 @@ class Runner:
             timedelta = datetime.now() - real_time_start
             finish_time = real_time_start + timedelta / progress
 
-            print('\rSimulation completed: {:.2%}, est. finish {:02d}:{:02d}:{:02d}'.format(
-                progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
+            print(f'\rSimulation completed: {progress:.2%}, '
+                  f'est. finish {finish_time.hour:02d}:{finish_time.minute:02d}:{finish_time.second:02d}', end='')
 
         def save_networks() -> None:
             state = sim.gather_state()
@@ -414,13 +411,13 @@ class Runner:
 
             allocator.networks['policy']['target'](state[newaxis])
             allocator.networks['policy']['target'].save(
-                join(self.config.model_path, 'actor_allocation_' + training_name))
+                Path(self.config.model_path, f'actor_allocation_{training_name}'))
 
             allocator.networks['value1']['target'](concatenate([state, action])[newaxis])
             allocator.networks['value1']['target'].save(
-                join(self.config.model_path, 'critic_allocation_' + training_name))
+                Path(self.config.model_path, f'critic_allocation_{training_name}'))
 
-            copy2(join(dirname(__file__), 'config.py'), self.config.model_path)
+            copy2(Path(Path.cwd(), 'config.py'), self.config.model_path)
 
         def anneal_parameters() -> tuple:
             if simulation_step > self.config.exploration_noise_step_start_decay:
@@ -436,7 +433,7 @@ class Runner:
             )
 
         # setup---------------------------------------------------------------------------------------------------------
-        training_name = 'training_random_data' + name
+        training_name = f'training_random_data_{name}'
         real_time_start = datetime.now()
 
         if self.config.toggle_profiling:
@@ -447,7 +444,7 @@ class Runner:
             rng=self.rng,
         )
         if self.config.verbosity == 1:
-            print('Expected load: {:.2f}'.format(sim.get_expected_load()))
+            print(f'Expected load: {sim.get_expected_load():.2f}')
 
         allocator = TD3ActorCritic(
             name='allocator',
@@ -564,11 +561,10 @@ class Runner:
 
             # print episode results
             if self.config.verbosity == 1:
+                episode_per_step_reward = sum(episode_metrics['rewards']) / self.config.num_steps_per_episode
                 print('\n', end='')
-                print('episode per step reward: {:.2f}'.format(
-                    sum(episode_metrics['rewards']) / self.config.num_steps_per_episode))
-                print('episode mean value loss: {:.2f}'.format(
-                    mean(episode_metrics['value_losses'])))
+                print(f'episode per step reward: {episode_per_step_reward:.2f}')
+                print(f'episode mean value loss: {mean(episode_metrics["value_losses"]):.2f}')
 
             # reset simulation for next episode
             sim.reset()
@@ -581,10 +577,10 @@ class Runner:
         save_networks()
 
         # save logged results
-        with gzip_open(join(self.config.log_path, training_name + '_per_episode_metrics.gzip'), 'wb') as file:
+        with gzip_open(Path(self.config.log_path, f'{training_name}_per_episode_metrics.gzip'), 'wb') as file:
             pickle_dump(per_episode_metrics, file=file)
 
-        with gzip_open(join(self.config.model_path, 'policy_parameters_' + training_name + '.gzip'), 'wb') as file:
+        with gzip_open(Path(self.config.model_path, f'policy_parameters_{training_name}.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
 
         # end compute performance profiling
@@ -592,7 +588,7 @@ class Runner:
             self.profiler.disable()
             if self.config.verbosity == 1:
                 self.profiler.print_stats(sort='cumulative')
-            self.profiler.dump_stats(join(self.config.performance_profile_path, training_name + '.profile'))
+            self.profiler.dump_stats(Path(self.config.performance_profile_path, f'{training_name}.profile'))
 
         # plots
         plot_scatter_plot(per_episode_metrics['reward_per_step'],
@@ -613,11 +609,11 @@ class Runner:
             timedelta = datetime.now() - real_time_start
             finish_time = real_time_start + timedelta / progress
 
-            print('\rSimulation completed: {:.2%}, est. finish {:02d}:{:02d}:{:02d}'.format(
-                progress, finish_time.hour, finish_time.minute, finish_time.second), end='')
+            print(f'\rSimulation completed: {progress:.2%}, '
+                  f'est. finish {finish_time.hour:02d}:{finish_time.minute:02d}:{finish_time.second:02d}', end='')
 
         # setup---------------------------------------------------------------------------------------------------------
-        testing_name = 'testing_' + name
+        testing_name = f'testing_{name}'
         if self.config.verbosity == 1:
             print('\n' + testing_name)
         real_time_start = datetime.now()
@@ -629,7 +625,7 @@ class Runner:
             rng=self.rng,
         )
         if self.config.verbosity == 1:
-            print('Expected load: {:.2f}'.format(sim.get_expected_load()))
+            print(f'Expected load: {sim.get_expected_load():.2f}')
 
         # define allocation function
         if allocator == 'pretrained':
@@ -639,7 +635,7 @@ class Runner:
                 return allocator_network.call(state_current[newaxis]).numpy().squeeze()
 
             if self.config.prune_network:
-                with gzip_open(join(self.config.model_path, policy_pruning_parameters_path), 'rb') as file:
+                with gzip_open(Path(self.config.model_path, policy_pruning_parameters_path), 'rb') as file:
                     training_parameters_initial = pickle_load(file=file)['initial']
                 parameters_new = prune_network(
                     network=allocator_network,
@@ -711,21 +707,20 @@ class Runner:
 
             # print episode results
             if self.config.verbosity == 1:
+                per_step_reward = sum(episode_metrics['rewards']) / self.config.num_steps_per_episode
+                relative_timeouts = (sum(episode_metrics['priority_timeouts'])
+                                     / self.config.num_steps_per_episode
+                                     / (probability_critical_events + self.config.tiny_numerical_value))
                 print('\n', end='')
-                print('episode per step reward: {:.2f}'.format(
-                    sum(episode_metrics['rewards']) / self.config.num_steps_per_episode
-                ))
-                print('episode per occurrence priority timeouts: {:.2f}'.format(
-                    sum(episode_metrics['priority_timeouts']) / self.config.num_steps_per_episode / (
-                        probability_critical_events + self.config.tiny_numerical_value)
-                ))
+                print(f'episode per step reward: {per_step_reward:.2f}')
+                print(f'episode per occurrence priority timeouts: {relative_timeouts:.2f}')
 
             # reset simulation for next episode
             sim.reset()
 
         # teardown------------------------------------------------------------------------------------------------------
         # save logged results
-        with gzip_open(join(self.config.log_path, testing_name + '_per_episode_metrics.gzip'), 'wb') as file:
+        with gzip_open(Path(self.config.log_path, f'{testing_name}_per_episode_metrics.gzip'), 'wb') as file:
             pickle_dump(per_episode_metrics, file=file)
 
         # end compute performance profiling
