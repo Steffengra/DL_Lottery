@@ -19,8 +19,7 @@ from DL_Lottery_imports.dl_internals_with_expl import (
     optimizer_nadam,
 )
 
-# TODO: Look more deeply into the fisher approximation by adam. seems fishy - does it jump around much at every step?
-# TODO: Maybe try cooling learning rate again
+# TODO: Look more deeply into the fisher approximation by adam. does it jump around much at every step?
 # TODO: SAC has an adaptive method for learning weight parameters
 
 
@@ -29,7 +28,8 @@ class Config:
             self,
     ) -> None:
         # GENERAL-------------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_1e4_2'
+        simulation_title: str = 'anchoring_1e5_0'
+        # simulation_title: str = 'test'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.show_plots: bool = False
         self.toggle_profiling: bool = False  # compute performance profiling
@@ -38,7 +38,7 @@ class Config:
         rng_seed: int or None = None  # doesn't work at this time
 
         # ENVIRONMENT PARAMETERS----------------------------------------------------------------------------------------
-        self.num_episodes: int = 15
+        self.num_episodes: int = 30
         # simulation_length_seconds: int = 1
         # self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
         self.num_steps_per_episode: int = 10_000
@@ -73,17 +73,17 @@ class Config:
 
         # NETWORK PARAMETERS--------------------------------------------------------------------------------------------
         # ARCHITECTURE
-        self.hidden_layers_value_net: list = [64, 64]  # + output layer width 1
-        self.hidden_layers_policy_net: list = [64, 64]  # + output layer width num_actions
+        self.hidden_layers_value_net: list = [128, 128, 128,]  # + output layer width 1
+        self.hidden_layers_policy_net: list = [128, 128, 128,]  # + output layer width num_actions
         self.hidden_layer_args: dict = {
-            'activation_hidden': 'tanh',  # [>'relu', 'elu', 'tanh' 'penalized_tanh']
-            'kernel_initializer': 'glorot_uniform'  # options: tf.keras.initializers, default: >'glorot_uniform'
+            'activation_hidden': 'penalized_tanh',  # [>'relu', 'elu', 'tanh' 'penalized_tanh']
+            'kernel_initializer': 'glorot_uniform',  # options: tf.keras.initializers, default: >'glorot_uniform'
         }
         self.num_actions_policy: int = self.num_users
 
         self.optimizer_critic = optimizer_adam  # 'adam', 'nadam', 'amsgrad'
         self.optimizer_critic_args: dict = {
-            'learning_rate': 1e-2,
+            'learning_rate': 1e-3,
             'epsilon': 1e-8,
             'amsgrad': True,
         }
@@ -106,8 +106,10 @@ class Config:
         self.batch_size: int = 256
         self.batch_normalize: bool = False  # Normalize to 0 mean, unit variance based on mini-batch statistics
 
+        # ANCHORING
         self.adaptive_anchoring_weight_lambda: bool = False
-        self.anchoring_weight_lambda: float = 1e4  # Multiplier weight to the anchoring penalty in the loss function
+        self.policy_anchoring_weight_lambda: float = 1e5  # Multiplier weight to the anchoring penalty in the loss function
+        self.critic_anchoring_weight_lambda: float = 0.0
 
         # EXP BUFFER
         self.experience_buffer_max_size: int = 20_000
@@ -305,7 +307,8 @@ class Config:
             'training_noise_std': self.training_noise_std,
             'training_noise_clip': self.training_noise_clip,
             'tau_target_update': self.tau_target_update,
-            'weight_anchoring_lambda': self.anchoring_weight_lambda,
+            'policy_weight_anchoring_lambda': self.policy_anchoring_weight_lambda,
+            'critic_weight_anchoring_lambda': self.critic_anchoring_weight_lambda,
         }
 
     def update_num_steps_per_episode(
