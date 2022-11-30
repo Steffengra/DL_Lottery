@@ -279,6 +279,23 @@ class TD3ActorCritic:
 
         return fisher_diagonal_estimates
 
+    def get_critic_params(
+            self,
+            network: str  # target or primary
+    ) -> list:
+        return self.networks['value1'][network].get_weights()
+
+    def get_critic_fisher_diagonal_estimate(
+            self,
+            network: str  # target or primary
+    ) -> list:
+        fisher_diagonal_estimates = [
+            self.networks['value1'][network].optimizer.get_slot(var, 'vhat').numpy()
+            for var in self.networks['value1'][network].trainable_variables
+        ]
+
+        return fisher_diagonal_estimates
+
     def add_experience(
             self,
             state,
@@ -297,7 +314,6 @@ class TD3ActorCritic:
                 'next_state': next_state,
             }
         )
-        # self.experience_buffer.add_experience(state, action, reward, next_state)
 
     @tf.function
     def update_target_networks(
@@ -335,9 +351,12 @@ class TD3ActorCritic:
             rewards,
             next_states,
             sample_importance_weights,
-            weight_anchoring_lambda: None or float = None,
+            policy_weight_anchoring_lambda: None or float = None,
             policy_parameters_anchor: None or list = None,
             policy_parameters_fisher: None or list = None,
+            critic_weight_anchoring_lambda: None or float = None,
+            critic_parameters_anchor: None or list = None,
+            critic_parameters_fisher: None or list = None,
     ) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
         def call_network(network, inputs):
             if self.batch_normalize:
@@ -377,7 +396,39 @@ class TD3ActorCritic:
             with tf.GradientTape() as tape:  # autograd
                 estimate = tf.squeeze(call_network(self.networks['value1']['primary'], input_vector))
                 td_error = tf.math.subtract(target_q, estimate)
-                loss = self.networks['value1']['primary'].loss(td_error, sample_importance_weights)
+                loss_estimation = self.networks['value1']['primary'].loss(td_error, sample_importance_weights)
+
+                # loss anchor
+                if critic_parameters_anchor:
+                    critic_parameters_current = tf.concat(  # flatten
+                        [tf.reshape(self.networks['value1']['primary'].trainable_variables[layer], [-1])
+                         for layer in range(len(self.networks['value1']['primary'].trainable_variables))],
+                        axis=0)
+                    critic_parameters_anchor = tf.concat(  # flatten
+                        [tf.reshape(critic_parameters_anchor[layer], [-1])
+                         for layer in range(len(critic_parameters_anchor))],
+                        axis=0)
+                    critic_parameters_fisher = tf.concat(  # flatten
+                        [tf.reshape(critic_parameters_fisher[layer], [-1])
+                         for layer in range(len(critic_parameters_fisher))],
+                        axis=0)
+
+                    critic_parameter_difference = tf.math.squared_difference(critic_parameters_current,
+                                                                             critic_parameters_anchor)
+                    fisher_weighted_critic_parameter_difference = tf.multiply(critic_parameters_fisher,
+                                                                              critic_parameter_difference)
+                    critic_parameter_difference_mean = tf.reduce_mean(fisher_weighted_critic_parameter_difference)
+                    lambda_weighted_critic_parameter_difference_mean = tf.multiply(critic_weight_anchoring_lambda,
+                                                                                   critic_parameter_difference_mean)
+                else:
+                    lambda_weighted_critic_parameter_difference_mean = 0.0
+
+                # tf.print(loss_estimation)
+                # tf.print(lambda_weighted_critic_parameter_difference_mean, '\n\n')
+                loss = (
+                    loss_estimation
+                    + lambda_weighted_critic_parameter_difference_mean
+                )
 
             gradients = tape.gradient(target=loss,  # d_loss / d_parameters
                                       sources=self.networks['value1']['primary'].trainable_variables)
@@ -392,7 +443,37 @@ class TD3ActorCritic:
                 with tf.GradientTape() as tape:  # autograd
                     estimate = tf.squeeze(call_network(self.networks['value2']['primary'], input_vector))
                     td_error = tf.math.subtract(target_q, estimate)
-                    loss = self.networks['value2']['primary'].loss(td_error, sample_importance_weights)
+                    loss_estimation = self.networks['value2']['primary'].loss(td_error, sample_importance_weights)
+
+                    # loss anchor
+                    if critic_parameters_anchor:
+                        critic_parameters_current = tf.concat(  # flatten
+                            [tf.reshape(self.networks['value2']['primary'].trainable_variables[layer], [-1])
+                             for layer in range(len(self.networks['value2']['primary'].trainable_variables))],
+                            axis=0)
+                        critic_parameters_anchor = tf.concat(  # flatten
+                            [tf.reshape(critic_parameters_anchor[layer], [-1])
+                             for layer in range(len(critic_parameters_anchor))],
+                            axis=0)
+                        critic_parameters_fisher = tf.concat(  # flatten
+                            [tf.reshape(critic_parameters_fisher[layer], [-1])
+                             for layer in range(len(critic_parameters_fisher))],
+                            axis=0)
+
+                        critic_parameter_difference = tf.math.squared_difference(critic_parameters_current,
+                                                                                 critic_parameters_anchor)
+                        fisher_weighted_critic_parameter_difference = tf.multiply(critic_parameters_fisher,
+                                                                                  critic_parameter_difference)
+                        critic_parameter_difference_mean = tf.reduce_mean(fisher_weighted_critic_parameter_difference)
+                        lambda_weighted_critic_parameter_difference_mean = tf.multiply(critic_weight_anchoring_lambda,
+                                                                                       critic_parameter_difference_mean)
+                    else:
+                        lambda_weighted_critic_parameter_difference_mean = 0.0
+
+                    loss = (
+                            loss_estimation
+                            + lambda_weighted_critic_parameter_difference_mean
+                    )
 
                 gradients = tape.gradient(target=loss,  # d_loss / d_parameters
                                           sources=self.networks['value2']['primary'].trainable_variables)
@@ -402,7 +483,7 @@ class TD3ActorCritic:
         # --------------------------------------------------------------------------------------------------------------
 
         # Actor Network-------------------------------------------------------------------------------------------------
-        weight_anchoring_lambda_updated = weight_anchoring_lambda
+        policy_weight_anchoring_lambda_updated = policy_weight_anchoring_lambda
         if train_policy:
             # Gradient step policy--------------------------------------------------------------
             input_vector = states
@@ -434,10 +515,13 @@ class TD3ActorCritic:
                     fisher_weighted_policy_parameter_difference = tf.multiply(policy_parameters_fisher,
                                                                               policy_parameter_difference)
                     policy_parameter_difference_mean = tf.reduce_mean(fisher_weighted_policy_parameter_difference)
-                    lambda_weighted_policy_parameter_difference_mean = tf.multiply(weight_anchoring_lambda,
+                    lambda_weighted_policy_parameter_difference_mean = tf.multiply(policy_weight_anchoring_lambda_updated,
                                                                                    policy_parameter_difference_mean)
                 else:
                     lambda_weighted_policy_parameter_difference_mean = 0.0
+
+                # tf.print('w', lambda_weighted_policy_parameter_difference_mean)
+                # tf.print('v', value_network_score)
 
                 loss = (
                         - value_network_score
@@ -470,7 +554,7 @@ class TD3ActorCritic:
         # --------------------------------------------------------------------------------------------------------------
 
         self.update_target_networks(tau_target_update=tau_target_update)
-        return q1_loss, q1_td_error, weight_anchoring_lambda_updated
+        return q1_loss, q1_td_error, policy_weight_anchoring_lambda_updated
 
     def train(
             self,
@@ -479,9 +563,12 @@ class TD3ActorCritic:
             tau_target_update: float,
             train_value: bool = True,
             train_policy: bool = True,
-            weight_anchoring_lambda: None or float = None,
+            policy_weight_anchoring_lambda: None or float = None,
             policy_parameters_anchor: None or list = None,
             policy_parameters_fisher: None or list = None,
+            critic_weight_anchoring_lambda: None or float = None,
+            critic_parameters_anchor: None or list = None,
+            critic_parameters_fisher: None or list = None,
     ) -> tuple[float or None, float or None]:
 
         if self.experience_buffer.get_len() < self.batch_size:
@@ -505,7 +592,10 @@ class TD3ActorCritic:
         train_policy = tf.constant(train_policy)
 
         if policy_parameters_anchor:
-            weight_anchoring_lambda = tf.constant(weight_anchoring_lambda, dtype=tf.float32)
+            # TODO: IF SOMETHING BREAKS THIS IS IT
+            policy_weight_anchoring_lambda = tf.constant(policy_weight_anchoring_lambda, dtype=tf.float32)
+        if critic_parameters_anchor:
+            critic_weight_anchoring_lambda = tf.constant(critic_weight_anchoring_lambda, dtype=tf.float32)
 
         (
             q1_loss,
@@ -521,9 +611,12 @@ class TD3ActorCritic:
             rewards=rewards,
             next_states=next_states,
             sample_importance_weights=sample_importance_weights,
-            weight_anchoring_lambda=weight_anchoring_lambda,
+            policy_weight_anchoring_lambda=policy_weight_anchoring_lambda,
             policy_parameters_anchor=policy_parameters_anchor,
             policy_parameters_fisher=policy_parameters_fisher,
+            critic_weight_anchoring_lambda=critic_weight_anchoring_lambda,
+            critic_parameters_anchor=critic_parameters_anchor,
+            critic_parameters_fisher=critic_parameters_fisher,
         )
 
         self.experience_buffer.adjust_priorities(experience_ids=experience_ids, new_priorities=q1_td_error.numpy())

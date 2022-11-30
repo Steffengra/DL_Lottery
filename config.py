@@ -28,7 +28,7 @@ class Config:
             self,
     ) -> None:
         # GENERAL-------------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_1e5_0'
+        simulation_title: str = 'anchoring_1e7_0'
         # simulation_title: str = 'test'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.show_plots: bool = False

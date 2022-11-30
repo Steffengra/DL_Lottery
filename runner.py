@@ -104,7 +104,8 @@ class Runner:
             probability_critical_events: float,
             value_network_path: None or str = None,  # for loading from pretrained
             policy_network_path: None or str = None,  # for loading from pretrained
-            anchoring_parameters_path: None or str = None,
+            policy_anchoring_parameters_path: None or str = None,
+            critic_anchoring_parameters_path: None or str = None,
     ) -> None:
         def progress_print() -> None:
             progress = (episode_id * self.config.num_steps_per_episode + step_id + 1) / self.config.steps_total
@@ -170,11 +171,18 @@ class Runner:
         # load anchoring parameters
         policy_parameters_anchor = None
         policy_parameters_fisher = None
-        if anchoring_parameters_path:
-            with gzip_open(anchoring_parameters_path, 'rb') as file:
+        if policy_anchoring_parameters_path:
+            with gzip_open(policy_anchoring_parameters_path, 'rb') as file:
                 policy_parameters = pickle_load(file)
             policy_parameters_anchor = policy_parameters['final']
             policy_parameters_fisher = policy_parameters['fisher']
+        critic_parameters_anchor = None
+        critic_parameters_fisher = None
+        if critic_anchoring_parameters_path:
+            with gzip_open(critic_anchoring_parameters_path, 'rb') as file:
+                critic_parameters = pickle_load(file)
+            critic_parameters_anchor = critic_parameters['final']
+            critic_parameters_fisher = critic_parameters['fisher']
 
         exploration_noise_momentum = self.config.exploration_noise_momentum_initial
 
@@ -185,6 +193,11 @@ class Runner:
             'priority_timeouts_per_occurrence': +infty * ones(self.config.num_episodes),
         }
         policy_parameters: dict = {
+            'initial': [],
+            'final': [],
+            'fisher': [],
+        }
+        critic_parameters: dict = {
             'initial': [],
             'final': [],
             'fisher': [],
@@ -248,6 +261,8 @@ class Runner:
                     train_policy=train_policy,
                     policy_parameters_anchor=policy_parameters_anchor,
                     policy_parameters_fisher=policy_parameters_fisher,
+                    critic_parameters_anchor=critic_parameters_anchor,
+                    critic_parameters_fisher=critic_parameters_fisher,
                     **self.config.training_args,
                 )
                 if self.config.adaptive_anchoring_weight_lambda and weight_anchoring_lambda_updated is not None:
@@ -301,6 +316,8 @@ class Runner:
         # teardown------------------------------------------------------------------------------------------------------
         policy_parameters['final'] = allocator.get_policy_params('target')
         policy_parameters['fisher'] = allocator.get_policy_fisher_diagonal_estimate('primary')
+        critic_parameters['final'] = allocator.get_critic_params('primary')
+        critic_parameters['fisher'] = allocator.get_critic_fisher_diagonal_estimate('primary')
 
         # save trained networks locally
         save_networks()
@@ -310,6 +327,8 @@ class Runner:
             pickle_dump(per_episode_metrics, file=file)
         with gzip_open(Path(self.config.model_path, f'policy_parameters_{training_name}.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
+        with gzip_open(Path(self.config.model_path, f'critic_parameters_{training_name}.gzip'), 'wb') as file:
+            pickle_dump(critic_parameters, file=file)
 
         # end compute performance profiling
         if self.config.toggle_profiling:
@@ -326,75 +345,66 @@ class Runner:
         plot_scatter_plot(per_episode_metrics['priority_timeouts_per_occurrence'],
                           title='Per Occurrence Priority Timeouts')
 
-    def train_critical_events(
-            self,
-            name: str = '',
-            value_network_path: None or str = None,
-            policy_network_path: None or str = None,
-            anchoring_parameters_path: None or str = None,
-    ) -> None:
-        """Wrapper for 100% critical event chance"""
-        self.train(
-            training_name=f'training_critical_events_{name}',
-            probability_critical_events=1,
-            value_network_path=value_network_path,
-            policy_network_path=policy_network_path,
-            anchoring_parameters_path=anchoring_parameters_path,
-        )
+    # def train_critical_events(
+    #         self,
+    #         name: str = '',
+    #         value_network_path: None or str = None,
+    #         policy_network_path: None or str = None,
+    #         policy_anchoring_parameters_path: None or str = None,
+    #         critic_anchoring_parameters_path: None or str = None,
+    # ) -> None:
+    #     """Wrapper for 100% critical event chance"""
+    #     self.train(
+    #         training_name=f'training_critical_events_{name}',
+    #         probability_critical_events=1,
+    #         value_network_path=value_network_path,
+    #         policy_network_path=policy_network_path,
+    #         policy_anchoring_parameters_path=policy_anchoring_parameters_path,
+    #         critic_anchoring_parameters_path=critic_anchoring_parameters_path,
+    #     )
 
-    def train_no_critical_events(
-            self,
-            name: str = '',
-            value_network_path: None or str = None,
-            policy_network_path: None or str = None,
-            anchoring_parameters_path: None or str = None,
-    ) -> None:
-        """Wrapper for 0% critical event chance"""
-        self.train(
-            training_name=f'training_no_critical_events_{name}',
-            probability_critical_events=0,
-            value_network_path=value_network_path,
-            policy_network_path=policy_network_path,
-            anchoring_parameters_path=anchoring_parameters_path,
-        )
+    # def train_no_critical_events(
+    #         self,
+    #         name: str = '',
+    #         value_network_path: None or str = None,
+    #         policy_network_path: None or str = None,
+    #         policy_anchoring_parameters_path: None or str = None,
+    #         critic_anchoring_parameters_path: None or str = None,
+    # ) -> None:
+    #     """Wrapper for 0% critical event chance"""
+    #     self.train(
+    #         training_name=f'training_no_critical_events_{name}',
+    #         probability_critical_events=0,
+    #         value_network_path=value_network_path,
+    #         policy_network_path=policy_network_path,
+    #         policy_anchoring_parameters_path=policy_anchoring_parameters_path,
+    #         critic_anchoring_parameters_path=critic_anchoring_parameters_path,
+    #     )
 
-    def train_normal(
-            self,
-            name: str = '',
-            value_network_path: None or str = None,
-            policy_network_path: None or str = None,
-            anchoring_parameters_path: None or str = None,
-    ) -> None:
-        """Wrapper for normal amount of critical events"""
-        self.train(
-            training_name=f'training_normal_{name}',
-            probability_critical_events=self.config.normal_priority_job_probability,
-            value_network_path=value_network_path,
-            policy_network_path=policy_network_path,
-            anchoring_parameters_path=anchoring_parameters_path,
-        )
-
-    def train_fifty_percent_critical(
-            self,
-            name: str = '',
-            value_network_path: None or str = None,
-            policy_network_path: None or str = None,
-            anchoring_parameters_path: None or str = None,
-    ):
-        """Wrapper for 50% critical rate"""
-        self.train(
-            training_name=f'training_fifty_percent_critical_events_{name}',
-            probability_critical_events=0.5,
-            value_network_path=value_network_path,
-            policy_network_path=policy_network_path,
-            anchoring_parameters_path=anchoring_parameters_path,
-        )
+    # def train_normal(
+    #         self,
+    #         name: str = '',
+    #         value_network_path: None or str = None,
+    #         policy_network_path: None or str = None,
+    #         policy_anchoring_parameters_path: None or str = None,
+    #         critic_anchoring_parameters_path: None or str = None,
+    # ) -> None:
+    #     """Wrapper for normal amount of critical events"""
+    #     self.train(
+    #         training_name=f'training_normal_{name}',
+    #         probability_critical_events=self.config.normal_priority_job_probability,
+    #         value_network_path=value_network_path,
+    #         policy_network_path=policy_network_path,
+    #         policy_anchoring_parameters_path=policy_anchoring_parameters_path,
+    #         critic_anchoring_parameters_path=critic_anchoring_parameters_path,
+    #     )
 
     def train_on_random_data(
             self,
             value_network_path: None or str = None,
             policy_network_path: None or str = None,
             anchoring_parameters_path: None or str = None,
+            critic_anchoring_parameters_path: None or str = None,
             name: str = '',
     ) -> None:
         def progress_print() -> None:
@@ -473,6 +483,12 @@ class Runner:
             'fisher': [],
         }
 
+        critic_parameters: dict = {
+            'initial': [],
+            'final': [],
+            'fisher': [],
+        }
+
         # main loop-----------------------------------------------------------------------------------------------------
         per_episode_metrics: dict = {
             'reward_per_step': -infty * ones(self.config.num_episodes),
@@ -533,6 +549,8 @@ class Runner:
                     train_policy=train_policy,
                     policy_parameters_anchor=policy_parameters_anchor,
                     policy_parameters_fisher=policy_parameters_fisher,
+                    critic_parameters_anchor=critic_parameters_anchor,
+                    critic_parameters_fisher=critic_parameters_fisher,
                     **self.config.training_args,
                 )
 
@@ -573,6 +591,9 @@ class Runner:
         policy_parameters['final'] = allocator.get_policy_params('target')
         policy_parameters['fisher'] = allocator.get_policy_fisher_diagonal_estimate('primary')
 
+        critic_parameters['final'] = allocator.get_critic_params('target')
+        critic_parameters['fisher'] = allocator.get_critic_fisher_diagonal_estimate('primary')
+
         # save trained networks locally
         save_networks()
 
@@ -582,6 +603,9 @@ class Runner:
 
         with gzip_open(Path(self.config.model_path, f'policy_parameters_{training_name}.gzip'), 'wb') as file:
             pickle_dump(policy_parameters, file=file)
+
+        with gzip_open(Path(self.config.model_path, f'critic_parameters_{training_name}.gzip'), 'wb') as file:
+            pickle_dump(critic_parameters, file=file)
 
         # end compute performance profiling
         if self.config.toggle_profiling:
