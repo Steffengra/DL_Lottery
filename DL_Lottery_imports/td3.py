@@ -273,8 +273,9 @@ class TD3ActorCritic:
         Some optimizers such as adam calculate a fisher diagonal estimate part of the optimization
         """
         fisher_diagonal_estimates = [
-            self.networks['policy'][network].optimizer.get_slot(var, 'vhat').numpy()
-            for var in self.networks['policy'][network].trainable_variables
+            variable.numpy()
+            for variable in self.networks['policy'][network].optimizer.variables()
+            if variable.name.__contains__('vhat')
         ]
 
         return fisher_diagonal_estimates
@@ -290,8 +291,9 @@ class TD3ActorCritic:
             network: str  # target or primary
     ) -> list:
         fisher_diagonal_estimates = [
-            self.networks['value1'][network].optimizer.get_slot(var, 'vhat').numpy()
-            for var in self.networks['value1'][network].trainable_variables
+            variable.numpy()
+            for variable in self.networks['value1'][network].optimizer.variables()
+            if variable.name.__contains__('vhat')
         ]
 
         return fisher_diagonal_estimates
