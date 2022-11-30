@@ -28,7 +28,7 @@ class Config:
             self,
     ) -> None:
         # GENERAL-------------------------------------------------------------------------------------------------------
-        simulation_title: str = 'anchoring_1e7_0'
+        simulation_title: str = 'test'
         # simulation_title: str = 'test'
         self.verbosity: int = 1  # 0 = no prints, 1 = prints
         self.show_plots: bool = False
@@ -38,10 +38,10 @@ class Config:
         rng_seed: int or None = None  # doesn't work at this time
 
         # ENVIRONMENT PARAMETERS----------------------------------------------------------------------------------------
-        self.num_episodes: int = 30
+        self.num_episodes: int = 3
         # simulation_length_seconds: int = 1
         # self.symbols_per_subframe: int = 14  # see: 5g numerologies, 14=num0. For sim seconds -> sim steps
-        self.num_steps_per_episode: int = 10_000
+        self.num_steps_per_episode: int = 1_000
 
         # LOAD
         self.available_rb_ofdm: int = 10

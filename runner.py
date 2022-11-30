@@ -11,7 +11,7 @@ from numpy import (
 from numpy.random import (
     default_rng,
 )
-from tensorflow.keras.models import (
+from keras.models import (
     load_model,
 )
 from pathlib import (
