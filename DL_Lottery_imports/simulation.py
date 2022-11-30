@@ -129,7 +129,7 @@ class Simulation:
             rb_requested_priority,
             channel_quality,
             maximum_steps_delayed,
-        ])
+        ], dtype='float32')
 
     def allocate(
             self,
