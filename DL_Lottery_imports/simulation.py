@@ -215,7 +215,7 @@ class Simulation:
 
         # calculate capacity
         sum_capacity_kbit_per_second = 0.0
-        for ue_id, rb in zip(allocated_rb_per_ue.keys(), allocated_rb_per_ue.values()):
+        for ue_id, rb in allocated_rb_per_ue.items():
             sum_capacity_kbit_per_second += (
                     rb * self.config.bandwidth_per_rb_khz
                     * log2(1 + self.users[ue_id].channel_fading * self.config.ue_snr_linear)) / 1_000
