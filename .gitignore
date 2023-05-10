@@ -9,6 +9,7 @@ plotting/
 logs/
 performance_profiles/
 ignore/
+/reports/
 
 # Files
 *.pdf
